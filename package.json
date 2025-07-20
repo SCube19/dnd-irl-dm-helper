@@ -10,17 +10,28 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~5.0.4",
     "expo": "~53.0.17",
     "expo-status-bar": "~2.2.3",
+    "nativewind": "^4.1.23",
     "react": "19.0.0",
-    "react-native": "0.79.5",
     "react-dom": "19.0.0",
-    "react-native-web": "^0.20.0",
-    "@expo/metro-runtime": "~5.0.4"
+    "react-native": "0.79.5",
+    "react-native-canvas": "^0.1.40",
+    "react-native-gesture-handler": "^2.27.1",
+    "react-native-reanimated": "~3.17.4",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-transformable-image": "^0.0.18",
+    "react-native-web": "^0.20.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
+    "daisyui": "^5.0.46",
+    "metro-react-native-babel-preset": "^0.77.0",
+    "prettier-plugin-tailwindcss": "^0.5.11",
+    "react-native-animation-library": "^0.0.8",
+    "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3"
   },
   "private": true
