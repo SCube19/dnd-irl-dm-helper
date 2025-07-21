@@ -1,6 +1,6 @@
 import React from "react";
 import "../../styles/global.css";
-import { Image, StyleSheet } from "react-native";
+import { Image, Pressable, StyleSheet, Text } from "react-native";
 
 import turbulence from "../../../assets/turbulence.svg";
 
@@ -12,26 +12,17 @@ const ButtonPrimary = ({
   children?: React.ReactNode;
 }) => {
   return (
-    <button
+    <Pressable
       onClick={onClick}
-      className={`bg-primary h-field transition-colors transform hover:bg-primary-dark text-content-primary text-size-selector px-box font-bold border-primary-darker border-selector font rounded-field  focus:outline-none justify-center flex flex-nowrap items-center active:scale-[0.99] active:translate-y-0.5 relative overflow-hidden shadow-md active:shadow-sm`}
+      className={`bg-primary h-field transition-colors transform hover:bg-primary-dark text-content-primary text-size-selector px-box font-bold border-primary-dark border-selector font rounded-field  focus:outline-none justify-center flex flex-nowrap items-center active:scale-[0.99] active:translate-y-0.5 relative overflow-hidden shadow-md active:shadow-sm w-fit`}
     >
       <Image
-        className="opacity-30 bg-blend-overlay h-full w-full"
+        className="opacity-30 bg-blend-overlay h-full w-full absolute"
         source={turbulence}
-        style={styles.cover}
       ></Image>
-      {children}
-    </button>
+      <Text className="text-content-primary font-bold">{children}</Text>
+    </Pressable>
   );
 };
 
 export default ButtonPrimary;
-
-const styles = StyleSheet.create({
-  cover: {
-    width: "100%",
-    height: "100%",
-    position: "absolute",
-  },
-});
