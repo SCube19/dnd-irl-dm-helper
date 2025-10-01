@@ -16,15 +16,16 @@ const MapCard = ({
   onPress,
 }: {
   photoUri?: ImageSourcePropType;
+  mapName?: string;
   onPress?: () => void;
 }) => {
   const [show, setShow] = useState(false);
 
   return (
     <Pressable
-      onClick={onPress}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onPress={onPress}
+      onHoverIn={() => setShow(true)}
+      onHoverOut={() => setShow(false)}
       className="relative w-full pb-[100%] bg-base-100 rounded-box shadow-md overflow-hidden flex items-center justify-center cursor-pointer transform transition duration-200 hover:scale-[1.02]"
       style={{ aspectRatio: "1/1" }} // Ensure square aspect ratio
     >
@@ -32,10 +33,7 @@ const MapCard = ({
         // Display the photo if photoUri is provided
         <>
           {/* Increase size to 105% */}
-          <View
-            style={styles.overflow}
-            className="transition absolute z-20 inset-0 transparent hover:bg-white/20 hover:backdrop-blur-sm"
-          >
+          <View className="transition-none absolute z-20 inset-0 transparent hover:bg-white/20 hover:backdrop-blur-sm">
             {show && (
               <Text className="flex h-full justify-center items-center color-base-100 font-extrabold sm:text-sm md:text-md lg:text-lg xl:text-xl text-center text-shadow-lg wrap-anywhere m-auto p-4">
                 {mapName ? mapName : "Unnamed"}
@@ -81,10 +79,6 @@ const styles = StyleSheet.create({
     right: 0,
     transform: "rotate(117deg) skewX(242deg)",
     height: 50,
-  },
-  overflow: {
-    height: "110%",
-    width: "110%",
   },
 });
 
