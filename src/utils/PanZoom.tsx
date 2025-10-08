@@ -18,6 +18,7 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import { View, Platform } from "react-native";
+import { clamp } from "react-native-reanimated";
 
 interface PanZoomProps {
   containerSize: { width: number; height: number };
@@ -26,10 +27,7 @@ interface PanZoomProps {
   minScale?: number;
   maxScale?: number;
   initialScale?: number;
-}
-
-function clamp(val: number, min: number, max: number) {
-  return Math.min(Math.max(val, min), max);
+  onScaleUpdate?: (scale: number) => void;
 }
 
 function PanZoom({
@@ -39,6 +37,7 @@ function PanZoom({
   minScale = 0.5,
   maxScale = 3,
   initialScale = 1,
+  onScaleUpdate,
 }: PanZoomProps) {
   const translationX = useSharedValue(
     containerSize.width / 2 - contentSize.width / 2
@@ -61,7 +60,7 @@ function PanZoom({
   function setTranslation(xValue: number, yValue: number) {
     const minPixelsVisible: number = 100;
     const maxTranslateX = containerSize.width - minPixelsVisible;
-    const maxTranslateY = containerSize.width - minPixelsVisible;
+    const maxTranslateY = containerSize.height - minPixelsVisible;
     const minTranslateX = minPixelsVisible - contentSize.width * scale.value;
     const minTranslateY = minPixelsVisible - contentSize.height * scale.value;
     translationX.value = clamp(xValue, minTranslateX, maxTranslateX);
@@ -129,6 +128,7 @@ function PanZoom({
       const preTransitionedY = (containerY - translationY.value) / scale.value;
 
       scale.value = newScale;
+      onScaleUpdate?.(scale.value);
 
       // Set transition value so that we solve for translation in
       // scale * point_if_not_transformed + translation = point_if_transformed
