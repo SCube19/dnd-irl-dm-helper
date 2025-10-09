@@ -41,18 +41,20 @@ function MapGrid({ gridSize, color, containerSize, scale }: MapGridProps) {
     `,
     backgroundSize: `${gridSize}px ${gridSize}px`,
     position: "absolute",
-    zIndex: "999",
+    zIndex: "20",
     top: -displacementX,
     left: -displacementY,
     width: gridWidth,
     height: gridHeight,
     backgroundBlendMode: "difference",
+    mixBlendMode: "difference",
   };
 
   return <View style={gridStyle}></View>;
 }
 
 function MapScreen({ route }: MapScreenProps) {
+  const fow = require("../../assets/fog.svg");
   const mapImage = require("../../assets/placeholders/1.png");
   const originalImageSize = {
     width: mapImage.width,
@@ -106,6 +108,14 @@ function MapScreen({ route }: MapScreenProps) {
     }
   }, [snapToGrid, gridSize]);
 
+  const fowStyle = {
+    width: "100%",
+    height: "100%",
+    position: "absolute",
+    zIndex: "999",
+    boxShadow: "25px 25px 50px 0 white inset, -25px -25px 50px 0 white inset";
+  };
+
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
       <View
@@ -140,6 +150,7 @@ function MapScreen({ route }: MapScreenProps) {
                 height: imageSize.height,
               }}
             />
+            <Image source={fow} style={fowStyle}></Image>
             <MapGrid
               gridSize={gridSize}
               color={color}
