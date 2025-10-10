@@ -70,7 +70,7 @@ function MapScreen({ route }: MapScreenProps) {
       console.log(width);
       setImageSize({ width, height });
     });
-  });
+  }, []);
 
   const [containerSize, setContainerSize] = useState({
     width: Dimensions.get("window").width,
@@ -85,7 +85,7 @@ function MapScreen({ route }: MapScreenProps) {
       }
     );
     return () => subscription?.remove();
-  });
+  }, []);
 
   const [gridSize, setGridSize] = useState<number>(15);
   const color: string = "#ddddddb0";

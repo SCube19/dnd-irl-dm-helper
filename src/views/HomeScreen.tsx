@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { View, Text, SafeAreaView, Image, Modal } from "react-native";
 import ButtonPrimary from "../components/buttons/ButtonPrimary";
 import ButtonSecondary from "../components/buttons/ButtonSecondary";
