@@ -1,5 +1,6 @@
 import React, {
   createRef,
+  memo,
   use,
   useCallback,
   useEffect,
@@ -30,7 +31,7 @@ interface PanZoomProps {
   onScaleUpdate?: (scale: number) => void;
 }
 
-function PanZoom({
+const PanZoom = memo(function PanZoom({
   containerSize,
   contentSize,
   children,
@@ -145,7 +146,7 @@ function PanZoom({
       return () => {
         window.removeEventListener("wheel", handleWheel);
       };
-    }, [handleWheel]);
+    }, []);
   } else {
   }
 
@@ -172,6 +173,6 @@ function PanZoom({
       </GestureDetector>
     </GestureHandlerRootView>
   );
-}
+});
 
 export default PanZoom;
