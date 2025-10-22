@@ -3,6 +3,7 @@ import { View, SafeAreaView, Image, Dimensions } from "react-native";
 import PanZoom from "../utils/PanZoom";
 import "../styles/global.css";
 import { clamp } from "react-native-reanimated";
+import FogShader from "../shaders/FogShader";
 
 interface MapScreenProps {
   route: string;
@@ -29,7 +30,7 @@ const MapGrid = memo(function MapGrid({
   scale,
 }: MapGridProps) {
   const scaleInverse: number = 1 / scale;
-  const lineWidth: number = clamp(scaleInverse, 0.6, 3);
+  const lineWidth: number = clamp(scaleInverse, 0.4, 3);
   const gridStyle = {
     backgroundImage: `
       repeating-linear-gradient(0deg, ${color}, ${color} ${lineWidth}px, transparent 1px, transparent ${gridSpacing}px),
@@ -94,14 +95,6 @@ function MapScreen({ route }: MapScreenProps) {
     imageSize = { width: snappedSize, height: snappedSize };
   }
 
-  const fowStyle = {
-    width: "100%",
-    height: "100%",
-    position: "absolute",
-    zIndex: "20",
-    boxShadow: "25px 25px 50px 0 white inset, -25px -25px 50px 0 white inset",
-  };
-
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
       <View
@@ -136,7 +129,14 @@ function MapScreen({ route }: MapScreenProps) {
                 height: imageSize.height,
               }}
             />
-            <Image source={fow} style={fowStyle}></Image>
+            <View className="w-full h-full absolute z-20 left-0 top-0">
+              <FogShader
+                shaderSize={{
+                  width: imageSize.width,
+                  height: imageSize.height,
+                }}
+              ></FogShader>
+            </View>
             <MapGrid
               gridSpacing={gridSpacing}
               color={gridColor}
