@@ -1,9 +1,11 @@
-import React, { memo, Profiler, useEffect, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import { View, SafeAreaView, Image, Dimensions } from "react-native";
-import PanZoom from "../utils/PanZoom";
+import PanZoomTouch from "../components/PanZoomTouch";
 import "../styles/global.css";
 import { clamp } from "react-native-reanimated";
 import FogShader from "../shaders/FogShader";
+import { Point } from "../types/common";
+import { useSet } from "../utils/hooks";
 
 interface MapScreenProps {
   route: string;
@@ -49,7 +51,6 @@ const MapGrid = memo(function MapGrid({
   return <View style={gridStyle}></View>;
 });
 
-const fow = require("../../assets/fog.svg");
 const mapImage = require("../../assets/placeholders/1.png");
 
 const originalImageSize = {
@@ -95,6 +96,25 @@ function MapScreen({ route }: MapScreenProps) {
     imageSize = { width: snappedSize, height: snappedSize };
   }
 
+  const [revealedSquares, setRevealedSquares] = useState<Set<Point>>(new Set());
+  const revealedSquareDict = useRef<Record<string, Point>>({});
+  const revealSquares = (e: Point) => {
+    if (e.x < 0 || e.y < 0 || e.x > imageSize.width || e.y > imageSize.height)
+      return;
+    const clickedSquare: Point = new Point(
+      Math.floor(e.x / gridSpacing),
+      Math.floor(e.y / gridSpacing)
+    );
+    console.log(clickedSquare.toString());
+    if (clickedSquare.toString() in revealedSquareDict.current) {
+      delete revealedSquareDict.current[clickedSquare.toString()];
+    } else revealedSquareDict.current[clickedSquare.toString()] = clickedSquare;
+
+    setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+  };
+
+  //TODO: Map should be it's own component in the final product
+  //So everything inside PanZoomTouch goes into its own thing
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
       <View
@@ -104,7 +124,7 @@ function MapScreen({ route }: MapScreenProps) {
         }}
         className="bg-base-300"
       >
-        <PanZoom
+        <PanZoomTouch
           contentSize={{ width: imageSize.width, height: imageSize.height }}
           containerSize={{
             width: containerSize.width,
@@ -114,6 +134,7 @@ function MapScreen({ route }: MapScreenProps) {
           minScale={minScale}
           initialScale={initialScale}
           onScaleUpdate={(newScale) => setScale(newScale)}
+          onTouch={revealSquares}
         >
           <View
             style={{
@@ -135,6 +156,11 @@ function MapScreen({ route }: MapScreenProps) {
                   width: imageSize.width,
                   height: imageSize.height,
                 }}
+                squareSize={{
+                  width: gridSpacing,
+                  height: gridSpacing,
+                }}
+                revealedSquares={revealedSquares}
               ></FogShader>
             </View>
             <MapGrid
@@ -144,7 +170,7 @@ function MapScreen({ route }: MapScreenProps) {
               scale={scale}
             ></MapGrid>
           </View>
-        </PanZoom>
+        </PanZoomTouch>
       </View>
     </SafeAreaView>
   );

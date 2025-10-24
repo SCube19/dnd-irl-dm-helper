@@ -10,10 +10,23 @@ import {
   Blend,
   DisplacementMap,
   Turbulence,
+  Group,
+  Mask,
+  Path,
+  SkPath,
+  Blur,
+  Morphology,
 } from "@shopify/react-native-skia";
-import { memo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { Dimensions } from "react-native";
-import { useAnimatedProps, useDerivedValue } from "react-native-reanimated";
+import Animated, {
+  SharedValue,
+  useAnimatedProps,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { Measure, Point } from "../types/common";
 
 const Fog = Skia.RuntimeEffect.Make(`
 uniform float iTime;
@@ -96,60 +109,123 @@ if (!Fog) {
   throw new Error("Failed to compile FogShader");
 }
 
-interface FogShaderProps {
-  shaderSize: {
-    width: number;
-    height: number;
-  };
+interface AnimatedPath {
+  path: React.JSX.Element;
+  blurProgress: SharedValue<number>;
+  erodeProgress: SharedValue<number>;
 }
+
+interface FogShaderProps {
+  shaderSize: Measure;
+  revealedSquares: Set<Point>;
+  squareSize: Measure;
+}
+
+let nextKey: number = 0;
 
 //Will always be placed at the center of the parent container
 // Maybe in the future we can make it more flexible
-const FogShader = memo(({ shaderSize }: FogShaderProps) => {
-  const clock = useClock();
-  const uniforms = useDerivedValue(
-    () => ({
-      iTime: clock.value / 2000.0,
-      iResolution: [shaderSize.width, shaderSize.height, 0],
-    }),
-    [clock]
-  );
+const FogShader = memo(
+  ({ shaderSize, revealedSquares, squareSize }: FogShaderProps) => {
+    const clock = useClock();
+    const uniforms = useDerivedValue(
+      () => ({
+        iTime: clock.value / 2000.0,
+        iResolution: [shaderSize.width, shaderSize.height, 0],
+      }),
+      [clock]
+    );
 
-  const canvasResize = 1.4;
-  const shaderResize = 1.1;
+    const canvasResize = 1.4;
+    const shaderResize = 1.1;
 
-  const shaderInCanvasPlacement = {
-    width:
-      (shaderSize.width * canvasResize - shaderSize.width * shaderResize) / 2,
-    height:
-      (shaderSize.height * canvasResize - shaderSize.height * shaderResize) / 2,
-  };
-  const canvasInParentPlacement = {
-    width: (shaderSize.width * shaderResize - shaderSize.width) / 2,
-    height: (shaderSize.height * shaderResize - shaderSize.height) / 2,
-  };
+    const shaderInCanvasPlacement: Measure = useMemo(
+      () => ({
+        width:
+          (shaderSize.width * canvasResize - shaderSize.width * shaderResize) /
+          2,
+        height:
+          (shaderSize.height * canvasResize -
+            shaderSize.height * shaderResize) /
+          2,
+      }),
+      [shaderSize]
+    );
 
-  return (
-    <Canvas
-      style={{
-        width: shaderSize.width * canvasResize,
-        height: shaderSize.height * canvasResize,
-        position: "absolute",
-        left: -shaderInCanvasPlacement.width - canvasInParentPlacement.width,
-        top: -shaderInCanvasPlacement.height - canvasInParentPlacement.height,
-      }}
-    >
-      <Rect
-        x={shaderInCanvasPlacement.width}
-        y={shaderInCanvasPlacement.height}
-        width={shaderSize.width * shaderResize}
-        height={shaderSize.height * shaderResize}
+    const canvasInParentPlacement: Measure = useMemo(
+      () => ({
+        width:
+          -shaderInCanvasPlacement.width -
+          (shaderSize.width * shaderResize - shaderSize.width) / 2,
+        height:
+          -shaderInCanvasPlacement.height -
+          (shaderSize.height * shaderResize - shaderSize.height) / 2,
+      }),
+      [shaderSize]
+    );
+
+    const squaresToSkPath = (squares: Set<Point>): SkPath => {
+      let newPath = Skia.Path.Make();
+      for (const square of squares) {
+        newPath = newPath.addRect({
+          x: square.x * squareSize.width - canvasInParentPlacement.width,
+          y: square.y * squareSize.height - canvasInParentPlacement.height,
+          width: squareSize.width,
+          height: squareSize.height,
+        });
+      }
+      return newPath;
+    };
+
+    const revealedSkPath: SkPath = squaresToSkPath(revealedSquares);
+
+    revealedSkPath.simplify();
+
+    const revealedPath = (
+      <Path
+        path={revealedSkPath.toSVGString()}
+        color="black"
+        fillType="evenOdd"
+      />
+    );
+
+    return (
+      <Canvas
+        style={{
+          width: shaderSize.width * canvasResize,
+          height: shaderSize.height * canvasResize,
+          position: "absolute",
+          left: canvasInParentPlacement.width,
+          top: canvasInParentPlacement.height,
+        }}
       >
-        <Shader source={Fog} uniforms={uniforms}></Shader>
-        <BlurMask blur={20} style="normal" />
-      </Rect>
-    </Canvas>
-  );
-});
+        <Mask
+          mode="luminance"
+          mask={
+            <Group>
+              <Rect
+                width={shaderSize.width * canvasResize}
+                height={shaderSize.height * canvasResize}
+                color="white"
+              ></Rect>
+              {revealedPath}
+              <BlurMask blur={5} style="normal" />
+            </Group>
+          }
+        >
+          <Rect
+            x={shaderInCanvasPlacement.width}
+            y={shaderInCanvasPlacement.height}
+            width={shaderSize.width * shaderResize}
+            height={shaderSize.height * shaderResize}
+          >
+            <Shader source={Fog} uniforms={uniforms}></Shader>
+            <BlurMask blur={20} style="normal" />
+          </Rect>
+        </Mask>
+      </Canvas>
+    );
+  }
+);
 
 export default FogShader;

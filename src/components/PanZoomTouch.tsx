@@ -17,9 +17,14 @@ import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
+  GestureStateChangeEvent,
+  TapGestureHandlerEventPayload,
+  TouchData,
 } from "react-native-gesture-handler";
 import { View, Platform } from "react-native";
 import { clamp } from "react-native-reanimated";
+import { TouchEventType } from "react-native-gesture-handler/lib/typescript/TouchEventType";
+import { Point } from "../types/common";
 
 interface PanZoomProps {
   containerSize: { width: number; height: number };
@@ -29,6 +34,7 @@ interface PanZoomProps {
   maxScale?: number;
   initialScale?: number;
   onScaleUpdate?: (scale: number) => void;
+  onTouch?: (e: Point) => void;
 }
 
 const PanZoom = memo(function PanZoom({
@@ -39,6 +45,7 @@ const PanZoom = memo(function PanZoom({
   maxScale = 3,
   initialScale = 1,
   onScaleUpdate,
+  onTouch,
 }: PanZoomProps) {
   const translationX = useSharedValue(
     containerSize.width / 2 - contentSize.width / 2
@@ -110,7 +117,29 @@ const PanZoom = memo(function PanZoom({
     })
     .runOnJS(true);
 
-  let gestureArray: any[] = [pan];
+  const getContainerPoint = (absolute: Point): Point => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const containerX = clamp(absolute.x - rect.left, 0, rect.width);
+    const containerY = clamp(absolute.y - rect.top, 0, rect.height);
+    return { x: containerX, y: containerY };
+  };
+
+  const getContentPoint = (absolute: Point): Point => {
+    const containerPoint = getContainerPoint(absolute);
+    const contentX = (containerPoint.x - translationX.value) / scale.value;
+    const contentY = (containerPoint.y - translationY.value) / scale.value;
+    return { x: contentX, y: contentY };
+  };
+
+  const touch = Gesture.Tap()
+    .maxDuration(250)
+    .onStart((event) =>
+      onTouch?.(getContentPoint({ x: event.absoluteX, y: event.absoluteY }))
+    )
+    .runOnJS(true);
+
+  let gestureArray: any[] = [pan, touch];
+
   if (Platform.OS == "web") {
     const handleWheel = useCallback((e: WheelEvent) => {
       setCursor("crosshair", 200);
@@ -118,15 +147,16 @@ const PanZoom = memo(function PanZoom({
       const zoomDelta = e.deltaY < 0 ? 1.2 : 1 / 1.2; // 10% zoom in/out
 
       // Get mouse position relative to container top-left
-      const rect = containerRef.current?.getBoundingClientRect();
-      const containerX = clamp(e.clientX - rect.left, 0, rect.width);
-      const containerY = clamp(e.clientY - rect.top, 0, rect.height);
+      const container: Point = getContainerPoint({
+        x: e.clientX,
+        y: e.clientY,
+      });
 
       const newScale = clamp(scale.value * zoomDelta, minScale, maxScale);
 
       // Revert all transforms on the point that is pointed to
-      const preTransitionedX = (containerX - translationX.value) / scale.value;
-      const preTransitionedY = (containerY - translationY.value) / scale.value;
+      const preTransitionedX = (container.x - translationX.value) / scale.value;
+      const preTransitionedY = (container.y - translationY.value) / scale.value;
 
       scale.value = newScale;
       onScaleUpdate?.(scale.value);
@@ -135,8 +165,8 @@ const PanZoom = memo(function PanZoom({
       // scale * point_if_not_transformed + translation = point_if_transformed
       // So the point remains in the same position after new scale
       setTranslation(
-        containerX - preTransitionedX * scale.value,
-        containerY - preTransitionedY * scale.value
+        container.x - preTransitionedX * scale.value,
+        container.y - preTransitionedY * scale.value
       );
     }, []);
 
