@@ -3,14 +3,16 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import MapScreen from "./src/views/MapScreen";
 import HomeScreen from "./src/views/HomeScreen";
+import TestScreen from "./src/views/TestScreen";
+import ImageLibraryScreen from "./src/views/ImageLibraryScreen";
 
 const rootStack = createNativeStackNavigator({
   screens: {
     Home: {
-      screen: MapScreen,
+      screen: HomeScreen,
       options: {
         title: "Home",
-        headerShown: false,
+        headerShown: true,
       },
     },
     Map: {

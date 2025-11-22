@@ -12,6 +12,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   SharedValue,
+  runOnJS,
 } from "react-native-reanimated";
 import {
   Gesture,
@@ -35,6 +36,8 @@ interface PanZoomProps {
   initialScale?: number;
   onScaleUpdate?: (scale: number) => void;
   onTouch?: (e: Point) => void;
+  interactionMode?: "pan" | "draw";
+  onDraw?: (e: Point) => void;
 }
 
 const PanZoom = memo(function PanZoom({
@@ -46,6 +49,8 @@ const PanZoom = memo(function PanZoom({
   initialScale = 1,
   onScaleUpdate,
   onTouch,
+  interactionMode = "pan",
+  onDraw,
 }: PanZoomProps) {
   const translationX = useSharedValue(
     containerSize.width / 2 - contentSize.width / 2
@@ -89,34 +94,6 @@ const PanZoom = memo(function PanZoom({
     cursor.value = newCursor;
   }
 
-  const panZoomStyle = useAnimatedStyle(() => ({
-    transform: `translate(${translationX.value}px, ${translationY.value}px) scale(${scale.value})`,
-    transformOrigin: "0 0",
-    transition: enableTransition.value ? "transform 0.15s ease-out" : "none",
-  }));
-
-  const pan = Gesture.Pan()
-    .minDistance(1)
-    .onBegin(() => {
-      setCursor("grabbing");
-    })
-    .onStart(() => {
-      prevTranslationX.value = translationX.value;
-      prevTranslationY.value = translationY.value;
-      enableTransition.value = false;
-    })
-    .onEnd(() => {
-      enableTransition.value = true;
-      setCursor();
-    })
-    .onUpdate((event) => {
-      setTranslation(
-        prevTranslationX.value + event.translationX,
-        prevTranslationY.value + event.translationY
-      );
-    })
-    .runOnJS(true);
-
   const getContainerPoint = (absolute: Point): Point => {
     const rect = containerRef.current?.getBoundingClientRect();
     const containerX = clamp(absolute.x - rect.left, 0, rect.width);
@@ -130,6 +107,48 @@ const PanZoom = memo(function PanZoom({
     const contentY = (containerPoint.y - translationY.value) / scale.value;
     return { x: contentX, y: contentY };
   };
+
+  const panZoomStyle = useAnimatedStyle(() => ({
+    transform: `translate(${translationX.value}px, ${translationY.value}px) scale(${scale.value})`,
+    transformOrigin: "0 0",
+    transition: enableTransition.value ? "transform 0.15s ease-out" : "none",
+  }));
+
+  const pan = Gesture.Pan()
+    .minDistance(1)
+    .onBegin(() => {
+      setCursor("grabbing");
+    })
+    .onStart((event) => {
+      if (interactionMode === "pan") {
+        prevTranslationX.value = translationX.value;
+        prevTranslationY.value = translationY.value;
+        enableTransition.value = false;
+      } else if (interactionMode === "draw" && onDraw) {
+        runOnJS(onDraw)(
+          getContentPoint({ x: event.absoluteX, y: event.absoluteY })
+        );
+      }
+    })
+    .onEnd(() => {
+      if (interactionMode === "pan") {
+        enableTransition.value = true;
+        setCursor();
+      }
+    })
+    .onUpdate((event) => {
+      if (interactionMode === "pan") {
+        setTranslation(
+          prevTranslationX.value + event.translationX,
+          prevTranslationY.value + event.translationY
+        );
+      } else if (interactionMode === "draw" && onDraw) {
+        runOnJS(onDraw)(
+          getContentPoint({ x: event.absoluteX, y: event.absoluteY })
+        );
+      }
+    })
+    .runOnJS(true);
 
   const touch = Gesture.Tap()
     .maxDuration(250)

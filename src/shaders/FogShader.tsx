@@ -164,22 +164,24 @@ const FogShader = memo(
       [shaderSize]
     );
 
-    const squaresToSkPath = (squares: Set<Point>): SkPath => {
-      let newPath = Skia.Path.Make();
-      for (const square of squares) {
-        newPath = newPath.addRect({
-          x: square.x * squareSize.width - canvasInParentPlacement.width,
-          y: square.y * squareSize.height - canvasInParentPlacement.height,
-          width: squareSize.width,
-          height: squareSize.height,
-        });
-      }
-      return newPath;
-    };
+    const revealedSkPath: SkPath = useMemo(() => {
+      const squaresToSkPath = (squares: Set<Point>): SkPath => {
+        let newPath = Skia.Path.Make();
+        for (const square of squares) {
+          newPath = newPath.addRect({
+            x: square.x * squareSize.width - canvasInParentPlacement.width,
+            y: square.y * squareSize.height - canvasInParentPlacement.height,
+            width: squareSize.width,
+            height: squareSize.height,
+          });
+        }
+        return newPath;
+      };
 
-    const revealedSkPath: SkPath = squaresToSkPath(revealedSquares);
-
-    revealedSkPath.simplify();
+      const path = squaresToSkPath(revealedSquares);
+      path.simplify();
+      return path;
+    }, [revealedSquares, squareSize, canvasInParentPlacement]);
 
     const revealedPath = (
       <Path

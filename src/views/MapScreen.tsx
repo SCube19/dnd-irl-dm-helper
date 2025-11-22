@@ -1,15 +1,20 @@
 import React, { memo, useEffect, useRef, useState } from "react";
-import { View, SafeAreaView, Image, Dimensions } from "react-native";
+import {
+  View,
+  SafeAreaView,
+  Image,
+  Dimensions,
+  ImageURISource,
+} from "react-native";
 import PanZoomTouch from "../components/PanZoomTouch";
 import "../styles/global.css";
 import { clamp } from "react-native-reanimated";
 import FogShader from "../shaders/FogShader";
-import { Point } from "../types/common";
+import { Measure, Point } from "../types/common";
 import { useSet } from "../utils/hooks";
-
-interface MapScreenProps {
-  route: string;
-}
+import SliderPrimary from "../components/sliders/SliderPrimary";
+import SwitchPrimary from "../components/switches/SwitchPrimary";
+import { getMapData, saveMapData } from "../utils/MapDataStorage";
 
 interface MapGridProps {
   gridSize: {
@@ -32,7 +37,7 @@ const MapGrid = memo(function MapGrid({
   scale,
 }: MapGridProps) {
   const scaleInverse: number = 1 / scale;
-  const lineWidth: number = clamp(scaleInverse, 0.4, 3);
+  const lineWidth: number = clamp(scaleInverse, 0.3, 3);
   const gridStyle = {
     backgroundImage: `
       repeating-linear-gradient(0deg, ${color}, ${color} ${lineWidth}px, transparent 1px, transparent ${gridSpacing}px),
@@ -51,17 +56,19 @@ const MapGrid = memo(function MapGrid({
   return <View style={gridStyle}></View>;
 });
 
-const mapImage = require("../../assets/placeholders/1.png");
+function MapScreen({ route }: any) {
+  const map = route.params.map;
 
-const originalImageSize = {
-  width: mapImage.width,
-  height: mapImage.height,
-};
+  const [originalImageSize, setOriginalImageSize] = useState({
+    width: map.width ?? 0,
+    height: map.height ?? 0,
+  });
 
-function MapScreen({ route }: MapScreenProps) {
   const [gridSpacing, setGridSpacing] = useState<number>(15);
   const [scale, setScale] = useState<number>(1);
   const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
+  const [showFog, setShowFog] = useState<boolean>(true);
+  const [interactionMode, setInteractionMode] = useState<"pan" | "draw">("pan");
 
   const [containerSize, setContainerSize] = useState({
     width: Dimensions.get("window").width,
@@ -71,52 +78,106 @@ function MapScreen({ route }: MapScreenProps) {
   const gridColor: string = "#ddddddb0";
 
   let imageSize = {
-    width: mapImage.width,
-    height: mapImage.height,
+    width: originalImageSize.width,
+    height: originalImageSize.height,
   };
 
   useEffect(() => {
-    const subscription = Dimensions.addEventListener(
-      "change",
-      ({ window, screen }) => {
-        setContainerSize({ width: window.width, height: window.height });
-      }
-    );
+    const subscription = Dimensions.addEventListener("change", ({ window }) => {
+      setContainerSize({ width: window.width, height: window.height });
+    });
     return () => subscription?.remove();
   }, []);
+
+  useEffect(() => {
+    if (map.width && map.height) {
+      setOriginalImageSize({ width: map.width, height: map.height });
+    } else if (map.uri && originalImageSize.width === 0) {
+      Image.getSize(map.uri, (width, height) => {
+        setOriginalImageSize({ width, height });
+      });
+    }
+  }, [map]);
 
   if (snapToGrid) {
     const snappedWidth =
       Math.floor(originalImageSize.width / gridSpacing) * gridSpacing;
     const snappedHeight =
       Math.floor(originalImageSize.height / gridSpacing) * gridSpacing;
-    const deltaWidth = Math.abs(originalImageSize.width - snappedWidth);
-    const deltaHeight = Math.abs(originalImageSize.height - snappedHeight);
-    const snappedSize = deltaWidth < deltaHeight ? snappedWidth : snappedHeight;
-    imageSize = { width: snappedSize, height: snappedSize };
+    imageSize = { width: snappedWidth, height: snappedHeight };
   }
 
   const [revealedSquares, setRevealedSquares] = useState<Set<Point>>(new Set());
   const revealedSquareDict = useRef<Record<string, Point>>({});
-  const revealSquares = (e: Point) => {
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (map.uri) {
+        const points = await getMapData(map.uri);
+        revealedSquareDict.current = {};
+        points.forEach((p) => {
+          revealedSquareDict.current[p.toString()] = p;
+        });
+        setRevealedSquares(new Set(points));
+      }
+    };
+    loadData();
+  }, [map.uri]);
+
+  useEffect(() => {
+    const saveData = async () => {
+      if (map.uri) {
+        await saveMapData(map.uri, Array.from(revealedSquares));
+      }
+    };
+    // Simple debounce could be added here if needed, but for now we save on every update
+    // given the frequency of updates isn't extremely high (user taps).
+    saveData();
+  }, [revealedSquares, map.uri]);
+
+  const revealSquares = (e: Point, eraseMode: boolean = false) => {
     if (e.x < 0 || e.y < 0 || e.x > imageSize.width || e.y > imageSize.height)
       return;
     const clickedSquare: Point = new Point(
       Math.floor(e.x / gridSpacing),
       Math.floor(e.y / gridSpacing)
     );
-    console.log(clickedSquare.toString());
     if (clickedSquare.toString() in revealedSquareDict.current) {
+      if (eraseMode) return;
       delete revealedSquareDict.current[clickedSquare.toString()];
     } else revealedSquareDict.current[clickedSquare.toString()] = clickedSquare;
 
     setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
   };
 
+  if (originalImageSize.width === 0 || originalImageSize.height === 0) {
+    return <View className="bg-base-200 h-full w-screen" />;
+  }
+
   //TODO: Map should be it's own component in the final product
   //So everything inside PanZoomTouch goes into its own thing
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
+      <View>
+        <SliderPrimary
+          value={gridSpacing}
+          onValueChange={setGridSpacing}
+          minimumValue={1}
+          maximumValue={100}
+          step={1}
+          className="w-full"
+        />
+        <SwitchPrimary
+          value={showFog}
+          onValueChange={setShowFog}
+          className="w-10"
+        />
+        <SwitchPrimary
+          value={interactionMode === "draw"}
+          onValueChange={(val) => setInteractionMode(val ? "draw" : "pan")}
+          className="w-10 ml-4"
+        />
+      </View>
       <View
         style={{
           width: containerSize.width,
@@ -135,6 +196,8 @@ function MapScreen({ route }: MapScreenProps) {
           initialScale={initialScale}
           onScaleUpdate={(newScale) => setScale(newScale)}
           onTouch={revealSquares}
+          interactionMode={interactionMode}
+          onDraw={(p) => revealSquares(p, true)}
         >
           <View
             style={{
@@ -144,24 +207,26 @@ function MapScreen({ route }: MapScreenProps) {
             }}
           >
             <Image
-              source={mapImage}
+              source={map}
               style={{
                 width: imageSize.width,
                 height: imageSize.height,
               }}
             />
             <View className="w-full h-full absolute z-20 left-0 top-0">
-              <FogShader
-                shaderSize={{
-                  width: imageSize.width,
-                  height: imageSize.height,
-                }}
-                squareSize={{
-                  width: gridSpacing,
-                  height: gridSpacing,
-                }}
-                revealedSquares={revealedSquares}
-              ></FogShader>
+              {showFog && (
+                <FogShader
+                  shaderSize={{
+                    width: imageSize.width,
+                    height: imageSize.height,
+                  }}
+                  squareSize={{
+                    width: gridSpacing,
+                    height: gridSpacing,
+                  }}
+                  revealedSquares={revealedSquares}
+                ></FogShader>
+              )}
             </View>
             <MapGrid
               gridSpacing={gridSpacing}

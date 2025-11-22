@@ -1,28 +1,61 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, SafeAreaView, Image, Modal } from "react-native";
+import {
+  View,
+  Text,
+  SafeAreaView,
+  Image,
+  Modal,
+  ImageURISource,
+} from "react-native";
 import ButtonPrimary from "../components/buttons/ButtonPrimary";
 import ButtonSecondary from "../components/buttons/ButtonSecondary";
 import Card from "../components/cards/Card";
 import MapCard from "../components/cards/MapCard";
 import UploadPopup from "../components/UploadPopup";
 import { useNavigation } from "@react-navigation/native";
+import * as DocumentPicker from "expo-document-picker";
+import { saveImage, getImages } from "../utils/ImageStorage";
 
 function HomeScreen() {
-  const maps = [
-    require("../../assets/placeholders/1.png"),
-    require("../../assets/placeholders/2.png"),
-    require("../../assets/placeholders/3.png"),
-    require("../../assets/placeholders/4.png"),
-  ];
-
   const header = require("../../assets/dndheader.png");
 
   const [uploadVisible, setUploadVisible] = useState<boolean>(false);
 
   const navigation = useNavigation();
 
-  const handleUpload = (imageUri: string) => {
-    navigation.navigate("Map", { map: imageUri });
+  const [maps, setMaps] = useState<ImageURISource[]>([]);
+
+  useEffect(() => {
+    loadImages();
+  }, []);
+
+  const loadImages = async () => {
+    try {
+      const loadedImages = await getImages();
+      setMaps(
+        loadedImages.map((image: string) => {
+          return { uri: image };
+        })
+      );
+    } catch (error) {
+      console.error("Failed to load images", error);
+    }
+  };
+
+  const handleUpload = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["image/*"],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await saveImage(result.assets[0].uri);
+        loadImages();
+      }
+    } catch (err) {
+      console.error("Unknown error: ", err);
+    }
   };
 
   return (
@@ -36,21 +69,7 @@ function HomeScreen() {
             Choose or upload a battle map
           </Text>
           <View className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-5 w-3/4 mx-auto">
-            <MapCard onPress={() => setUploadVisible(true)}></MapCard>
-            {maps.map((map, index) => (
-              <MapCard
-                key={index}
-                photoUri={map}
-                onPress={() => navigation.navigate("Map", { map: map })}
-              />
-            ))}
-            {maps.map((map, index) => (
-              <MapCard
-                key={index}
-                photoUri={map}
-                onPress={() => navigation.navigate("Map", { map: map })}
-              />
-            ))}
+            <MapCard onPress={handleUpload}></MapCard>
             {maps.map((map, index) => (
               <MapCard
                 key={index}
@@ -60,14 +79,14 @@ function HomeScreen() {
             ))}
           </View>
         </View>
-        <UploadPopup
+        {/* <UploadPopup
           isVisible={uploadVisible}
           onUpload={(uri) => {
             setUploadVisible(false);
             handleUpload(uri);
           }}
           onClose={() => setUploadVisible(false)}
-        ></UploadPopup>
+        ></UploadPopup> */}
       </View>
     </SafeAreaView>
   );
