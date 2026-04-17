@@ -7,7 +7,7 @@ import HomeScreen from "./src/views/HomeScreen";
 const rootStack = createNativeStackNavigator({
   screens: {
     Home: {
-      screen: MapScreen,
+      screen: HomeScreen,
       options: {
         title: "Home",
         headerShown: false,

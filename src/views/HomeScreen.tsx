@@ -1,26 +1,35 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, SafeAreaView, Image, Modal } from "react-native";
-import ButtonPrimary from "../components/buttons/ButtonPrimary";
-import ButtonSecondary from "../components/buttons/ButtonSecondary";
-import Card from "../components/cards/Card";
+import React, { useState } from "react";
+import { View, Text, SafeAreaView, Image } from "react-native";
 import MapCard from "../components/cards/MapCard";
 import UploadPopup from "../components/UploadPopup";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, NavigationProp } from "@react-navigation/native";
+import { RootStackParamList } from "../../App"; // Assuming standard react-navigation setup, but let's use generic
 
+// Static assets moved outside of component to prevent recreation on each render
+const maps = [
+  require("../../assets/placeholders/1.png"),
+  require("../../assets/placeholders/2.png"),
+  require("../../assets/placeholders/3.png"),
+  require("../../assets/placeholders/4.png"),
+];
+
+const header = require("../../assets/dndheader.png");
+
+/**
+ * HomeScreen Component
+ * Displays the main screen allowing users to choose or upload a battle map.
+ */
 function HomeScreen() {
-  const maps = [
-    require("../../assets/placeholders/1.png"),
-    require("../../assets/placeholders/2.png"),
-    require("../../assets/placeholders/3.png"),
-    require("../../assets/placeholders/4.png"),
-  ];
-
-  const header = require("../../assets/dndheader.png");
-
+  // State to manage the visibility of the upload modal
   const [uploadVisible, setUploadVisible] = useState<boolean>(false);
 
-  const navigation = useNavigation();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<any>();
 
+  /**
+   * Handles the upload of a new map image and navigates to the Map screen.
+   * @param imageUri - The URI of the uploaded image.
+   */
   const handleUpload = (imageUri: string) => {
     navigation.navigate("Map", { map: imageUri });
   };

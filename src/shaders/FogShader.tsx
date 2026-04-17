@@ -167,7 +167,7 @@ const FogShader = memo(
     const squaresToSkPath = (squares: Set<Point>): SkPath => {
       let newPath = Skia.Path.Make();
       for (const square of squares) {
-        newPath = newPath.addRect({
+        newPath.addRect({
           x: square.x * squareSize.width - canvasInParentPlacement.width,
           y: square.y * squareSize.height - canvasInParentPlacement.height,
           width: squareSize.width,
@@ -179,16 +179,6 @@ const FogShader = memo(
 
     const revealedSkPath: SkPath = squaresToSkPath(revealedSquares);
 
-    revealedSkPath.simplify();
-
-    const revealedPath = (
-      <Path
-        path={revealedSkPath.toSVGString()}
-        color="black"
-        fillType="evenOdd"
-      />
-    );
-
     return (
       <Canvas
         style={{
@@ -199,20 +189,7 @@ const FogShader = memo(
           top: canvasInParentPlacement.height,
         }}
       >
-        <Mask
-          mode="luminance"
-          mask={
-            <Group>
-              <Rect
-                width={shaderSize.width * canvasResize}
-                height={shaderSize.height * canvasResize}
-                color="white"
-              ></Rect>
-              {revealedPath}
-              <BlurMask blur={5} style="normal" />
-            </Group>
-          }
-        >
+        <Group>
           <Rect
             x={shaderInCanvasPlacement.width}
             y={shaderInCanvasPlacement.height}
@@ -222,7 +199,16 @@ const FogShader = memo(
             <Shader source={Fog} uniforms={uniforms}></Shader>
             <BlurMask blur={20} style="normal" />
           </Rect>
-        </Mask>
+
+          <Path
+            path={revealedSkPath}
+            color="black"
+            fillType="winding"
+            blendMode="dstOut"
+          >
+            <BlurMask blur={5} style="normal" />
+          </Path>
+        </Group>
       </Canvas>
     );
   }

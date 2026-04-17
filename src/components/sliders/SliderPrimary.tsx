@@ -104,7 +104,7 @@ const SliderPrimary = ({
           onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
           className={`${className} h-6 justify-center`}
         >
-          <View className="flex justify-center items-begin w-full h-1.5 m-1 bg-base-300 rounded-full">
+          <View className="flex justify-center items-start w-full h-1.5 m-1 bg-base-300 rounded-full">
             <Animated.View
               className="flex justify-center items-end absolute h-4 bg-secondary-lighter rounded-full overflow-hidden shadow-sm"
               style={trackStyle}

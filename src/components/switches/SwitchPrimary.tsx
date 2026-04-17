@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import "../../styles/global.css";
 import { View, Image, Pressable } from "react-native";
 import Animated, {
@@ -20,7 +20,7 @@ const SwitchPrimary = ({
   onValueChange,
   className,
 }: SwitchPrimaryProps) => {
-  const [width, setWidth] = React.useState(0);
+  const [width, setWidth] = useState(0);
   const progress = useSharedValue(value ? 1 : 0);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ const SwitchPrimary = ({
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       className={`${className} h-6 w-12 justify-center`}
     >
-      <View className="flex justify-center items-begin w-full h-1.5 m-1 bg-base-300 rounded-full">
+      <View className="flex justify-center items-start w-full h-1.5 m-1 bg-base-300 rounded-full">
         {/* Active Track (Clipped) */}
         <Animated.View
           className="absolute h-4 bg-secondary-lighter rounded-full overflow-hidden shadow-sm"
