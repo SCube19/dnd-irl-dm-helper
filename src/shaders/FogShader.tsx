@@ -17,7 +17,7 @@ import {
   Blur,
   Morphology,
 } from "@shopify/react-native-skia";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Dimensions } from "react-native";
 import Animated, {
   SharedValue,
@@ -25,6 +25,7 @@ import Animated, {
   useDerivedValue,
   useSharedValue,
   withTiming,
+  runOnJS,
 } from "react-native-reanimated";
 import { Measure, Point } from "../types/common";
 
@@ -109,19 +110,61 @@ if (!Fog) {
   throw new Error("Failed to compile FogShader");
 }
 
-interface AnimatedPath {
-  path: React.JSX.Element;
-  blurProgress: SharedValue<number>;
-  erodeProgress: SharedValue<number>;
-}
-
 interface FogShaderProps {
   shaderSize: Measure;
   revealedSquares: Set<Point>;
   squareSize: Measure;
 }
 
-let nextKey: number = 0;
+/* Looks cool but it's really heavy on the compute - may need to be rewritten later or removed */
+const AnimatedFogWisp = memo(
+  ({
+    square,
+    squareSize,
+    canvasInParentPlacement,
+    onComplete,
+    uniforms,
+  }: {
+    square: Point;
+    squareSize: Measure;
+    canvasInParentPlacement: Measure;
+    onComplete: (sq: Point) => void;
+    uniforms: any;
+  }) => {
+    const progress = useSharedValue(0);
+
+    useEffect(() => {
+      progress.value = withTiming(1, { duration: 1000 }, (finished) => {
+        if (finished) runOnJS(onComplete)(square);
+      });
+    }, []);
+
+    const animatedOpacity = useDerivedValue(() => {
+      return 1 - progress.value;
+    });
+
+    const animatedTransform = useDerivedValue(() => {
+      return [
+        { translateX: progress.value * 60 },
+        { translateY: -progress.value * 60 },
+      ];
+    });
+
+    return (
+      <Group transform={animatedTransform} opacity={animatedOpacity}>
+        <Rect
+          x={square.x * squareSize.width - canvasInParentPlacement.width}
+          y={square.y * squareSize.height - canvasInParentPlacement.height}
+          width={squareSize.width}
+          height={squareSize.height}
+        >
+          <Shader source={Fog} uniforms={uniforms} />
+          <BlurMask blur={15} style="normal" />
+        </Rect>
+      </Group>
+    );
+  },
+);
 
 //Will always be placed at the center of the parent container
 // Maybe in the future we can make it more flexible
@@ -133,7 +176,7 @@ const FogShader = memo(
         iTime: clock.value / 2000.0,
         iResolution: [shaderSize.width, shaderSize.height, 0],
       }),
-      [clock]
+      [clock],
     );
 
     const canvasResize = 1.4;
@@ -149,7 +192,7 @@ const FogShader = memo(
             shaderSize.height * shaderResize) /
           2,
       }),
-      [shaderSize]
+      [shaderSize],
     );
 
     const canvasInParentPlacement: Measure = useMemo(
@@ -161,10 +204,10 @@ const FogShader = memo(
           -shaderInCanvasPlacement.height -
           (shaderSize.height * shaderResize - shaderSize.height) / 2,
       }),
-      [shaderSize]
+      [shaderSize],
     );
 
-    const squaresToSkPath = (squares: Set<Point>): SkPath => {
+    const squaresToSkPath = (squares: Point[]): SkPath => {
       let newPath = Skia.Path.Make();
       for (const square of squares) {
         newPath.addRect({
@@ -177,7 +220,72 @@ const FogShader = memo(
       return newPath;
     };
 
-    const revealedSkPath: SkPath = squaresToSkPath(revealedSquares);
+    const isFirstRender = useRef(true);
+    const [stableSquareDict, setStableSquareDict] = useState<
+      Record<string, Point>
+    >({});
+    const [animatingSquareDict, setAnimatingSquareDict] = useState<
+      Record<string, Point>
+    >({});
+
+    useEffect(() => {
+      if (isFirstRender.current) {
+        isFirstRender.current = false;
+        const initialStable: Record<string, Point> = {};
+        for (const sq of revealedSquares) {
+          initialStable[`${sq.x},${sq.y}`] = sq;
+        }
+        setStableSquareDict(initialStable);
+        return;
+      }
+
+      let hasNewAnimating = false;
+      const newAnimatingDict = { ...animatingSquareDict };
+      const currentRevealedKeys = new Set();
+
+      revealedSquares.forEach((sq) =>
+        currentRevealedKeys.add(`${sq.x},${sq.y}`),
+      );
+
+      let hasModifiedStable = false;
+      const newStableDict = { ...stableSquareDict };
+
+      for (const key of Object.keys(newStableDict)) {
+        if (!currentRevealedKeys.has(key)) {
+          delete newStableDict[key];
+          hasModifiedStable = true;
+        }
+      }
+
+      for (const sq of revealedSquares) {
+        const key = `${sq.x},${sq.y}`;
+        if (!newStableDict[key] && !newAnimatingDict[key]) {
+          newAnimatingDict[key] = sq;
+          hasNewAnimating = true;
+
+          // Instantly punch out the hole!
+          newStableDict[key] = sq;
+          hasModifiedStable = true;
+        }
+      }
+
+      if (hasModifiedStable) setStableSquareDict(newStableDict);
+      if (hasNewAnimating) setAnimatingSquareDict(newAnimatingDict);
+    }, [revealedSquares]);
+
+    const onSquareAnimationComplete = useCallback((sq: Point) => {
+      const key = `${sq.x},${sq.y}`;
+      setAnimatingSquareDict((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }, []);
+
+    const revealedSkPath: SkPath = useMemo(
+      () => squaresToSkPath(Object.values(stableSquareDict)),
+      [stableSquareDict, canvasInParentPlacement, squareSize],
+    );
 
     return (
       <Canvas
@@ -208,10 +316,21 @@ const FogShader = memo(
           >
             <BlurMask blur={5} style="normal" />
           </Path>
+
+          {Object.values(animatingSquareDict).map((sq) => (
+            <AnimatedFogWisp
+              key={`${sq.x},${sq.y}`}
+              square={sq}
+              squareSize={squareSize}
+              canvasInParentPlacement={canvasInParentPlacement}
+              onComplete={onSquareAnimationComplete}
+              uniforms={uniforms}
+            />
+          ))}
         </Group>
       </Canvas>
     );
-  }
+  },
 );
 
 export default FogShader;
