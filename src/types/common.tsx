@@ -3,6 +3,13 @@ export interface XY {
   y: number;
 }
 
+export enum InteractionMode {
+  PAN = "pan",
+  DRAW = "draw",
+  RECT = "rect",
+  GRID = "grid",
+}
+
 export interface Measure {
   width: number;
   height: number;

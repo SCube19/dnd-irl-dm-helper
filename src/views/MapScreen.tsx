@@ -1,4 +1,4 @@
-import React, { memo, useRef, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   SafeAreaView,
@@ -7,105 +7,102 @@ import {
   Text,
 } from "react-native";
 import { MapInteractionConnector } from "../components/MapInteractionConnector";
-import ButtonSecondary from "../components/buttons/ButtonSecondary";
-import SliderPrimary from "../components/sliders/SliderPrimary";
+import { MapGrid } from "../components/MapGrid";
+import { MapControlsOverlay } from "../components/MapControlsOverlay";
 import "../styles/global.css";
-import { clamp } from "react-native-reanimated";
 import FogShader from "../shaders/FogShader";
-import { Point } from "../types/common";
 import { useMapTransform } from "../hooks/useMapTransform";
+import { useFogOfWar } from "../hooks/useFogOfWar";
+import * as MapDataStorage from "../utils/MapDataStorage";
+import { InteractionMode } from "../types/common";
 
 interface MapScreenProps {
-  route: string;
-}
-
-interface MapGridProps {
-  gridSize: {
-    width: number;
-    height: number;
-  };
-  gridSpacing: number;
-  color: string;
-  scale: number;
+  route: any;
 }
 
 const maxScale: number = 5;
 const minScale: number = 0.25;
 const initialScale: number = 1;
-
-const MapGrid = memo(function MapGrid({
-  gridSize,
-  gridSpacing,
-  color,
-  scale,
-}: MapGridProps) {
-  const scaleInverse: number = 1 / scale;
-  const lineWidth: number = clamp(scaleInverse, 0.4, 3);
-  const gridStyle = {
-    backgroundImage: `
-      repeating-linear-gradient(0deg, ${color}, ${color} ${lineWidth}px, transparent 1px, transparent ${gridSpacing}px),
-      repeating-linear-gradient(90deg, ${color}, ${color} ${lineWidth}px, transparent 1px, transparent ${gridSpacing}px)
-    `,
-    position: "absolute" as const,
-    zIndex: 5,
-    top: 0,
-    left: 0,
-    width: gridSize.width,
-    height: gridSize.height,
-    backgroundBlendMode: "difference" as const,
-    mixBlendMode: "difference" as const,
-  };
-
-  return <View style={gridStyle}></View>;
-});
-
-const mapImage = require("../../assets/placeholders/4.png");
-
 const maxResolution = 1024;
 
-const originalImageSize = {
-  width: mapImage.width,
-  height: mapImage.height,
-};
-
-function calculateImageSize(snapToGrid: boolean, gridSpacing: number) {
-  const downScaleFactor: number =
-    Math.max(mapImage.width, mapImage.height) > maxResolution
-      ? Math.max(mapImage.width, mapImage.height) / maxResolution
-      : 1;
-
-  let imageSize = {
-    width: mapImage.width / downScaleFactor,
-    height: mapImage.height / downScaleFactor,
-  };
-
-  if (snapToGrid) {
-    const snappedWidth =
-      Math.floor(imageSize.width / gridSpacing) * gridSpacing;
-    const snappedHeight =
-      Math.floor(imageSize.height / gridSpacing) * gridSpacing;
-    const deltaWidth = Math.abs(imageSize.width - snappedWidth);
-    const deltaHeight = Math.abs(imageSize.height - snappedHeight);
-    const snappedSize = deltaWidth < deltaHeight ? snappedWidth : snappedHeight;
-    imageSize = { width: snappedSize, height: snappedSize };
-  }
-  return imageSize;
-}
-
 function MapScreen({ route }: MapScreenProps) {
-  const [gridSpacing, setGridSpacing] = useState<number>(15);
+  const { map: mapUri } = route.params || {};
+
   const [scale, setScale] = useState<number>(1);
-  const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
-  const [interactionMode, setInteractionMode] = useState<"pan" | "draw" | "rect">("pan");
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>(
+    InteractionMode.PAN,
+  );
   const [eraseSize, setEraseSize] = useState<number>(1);
 
-  // useWindowDimensions automatically updates when screen size changes
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  const [mapName, setMapName] = useState<string>("");
+  const [isEditingName, setIsEditingName] = useState(false);
+
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const containerSize = { width: windowWidth, height: windowHeight };
 
   const gridColor: string = "#ddddddb0";
 
-  let imageSize = calculateImageSize(snapToGrid, gridSpacing);
+  const [fogOfWarVisible, setFogOfWarVisible] = useState<boolean>(true);
+
+  const {
+    gridSpacing,
+    setGridSpacing,
+    revealedSquares,
+    loadInitialSquares,
+    toggleSquareArea,
+    handleDraw,
+    onRectErase,
+    getRevealedSquareValues,
+    clearFogOfWar,
+  } = useFogOfWar(imageSize, 15);
+
+  // Load initial data
+  useEffect(() => {
+    const loadInit = async () => {
+      if (!mapUri) return;
+
+      const session = await MapDataStorage.getMapData(mapUri);
+      const displayUri = session.imageUri || mapUri;
+
+      const getDimensions = (): Promise<{ width: number; height: number }> => {
+        if (typeof displayUri === "number") {
+          const resolved = Image.resolveAssetSource(displayUri);
+          return Promise.resolve({
+            width: resolved.width,
+            height: resolved.height,
+          });
+        }
+        return new Promise((resolve) => {
+          Image.getSize(displayUri, (width, height) =>
+            resolve({ width, height }),
+          );
+        });
+      };
+
+      const originalSize = await getDimensions();
+      const downScaleFactor =
+        Math.max(originalSize.width, originalSize.height) > maxResolution
+          ? Math.max(originalSize.width, originalSize.height) / maxResolution
+          : 1;
+
+      const calculatedSize = {
+        width: originalSize.width / downScaleFactor,
+        height: originalSize.height / downScaleFactor,
+      };
+
+      setImageSize(calculatedSize);
+      setGridSpacing(session.gridSpacing || 15);
+      setMapName(session.name || "Unnamed Map");
+      loadInitialSquares(session.revealedSquares);
+      setIsLoading(false);
+    };
+
+    loadInit();
+  }, [mapUri, setGridSpacing, loadInitialSquares]);
 
   const mapTransform = useMapTransform(
     containerSize,
@@ -113,105 +110,45 @@ function MapScreen({ route }: MapScreenProps) {
     initialScale,
   );
 
-  const [revealedSquares, setRevealedSquares] = useState<Set<Point>>(new Set());
-  const revealedSquareDict = useRef<Record<string, Point>>({});
+  const [currentDisplayUri, setCurrentDisplayUri] = useState<any>(mapUri);
 
-  const toggleSquareArea = (centerPoint: Point, size: number) => {
-    const centerGridX = Math.floor(centerPoint.x / gridSpacing);
-    const centerGridY = Math.floor(centerPoint.y / gridSpacing);
-    
-    const centerKey = new Point(centerGridX, centerGridY).toString();
-    const isAdding = !(centerKey in revealedSquareDict.current);
-
-    const startX = centerGridX - Math.floor(size / 2);
-    const endX = centerGridX + Math.floor((size - 1) / 2) + 1;
-    const startY = centerGridY - Math.floor(size / 2);
-    const endY = centerGridY + Math.floor((size - 1) / 2) + 1;
-
-    let changed = false;
-
-    for (let x = startX; x < endX; x++) {
-      for (let y = startY; y < endY; y++) {
-        if (
-          x >= 0 &&
-          y >= 0 &&
-          x * gridSpacing < imageSize.width &&
-          y * gridSpacing < imageSize.height
-        ) {
-          const pt = new Point(x, y);
-          const key = pt.toString();
-          if (isAdding) {
-            if (!(key in revealedSquareDict.current)) {
-               revealedSquareDict.current[key] = pt;
-               changed = true;
-            }
-          } else {
-             if (key in revealedSquareDict.current) {
-               delete revealedSquareDict.current[key];
-               changed = true;
-             }
-          }
-        }
+  useEffect(() => {
+    const fetchUri = async () => {
+      if (mapUri) {
+        const session = await MapDataStorage.getMapData(mapUri);
+        setCurrentDisplayUri(session.imageUri || mapUri);
       }
-    }
-    
-    if (changed) setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+    };
+    fetchUri();
+  }, [mapUri]);
+
+  const handleSave = async () => {
+    if (!mapUri) return;
+    await MapDataStorage.saveMapData(mapUri, {
+      name: mapName,
+      revealedSquares: getRevealedSquareValues(),
+      gridSpacing: gridSpacing,
+      imageUri: currentDisplayUri,
+    });
+    setIsEditingName(false);
+    alert("Map state saved!");
   };
 
-  const handleDraw = (e: Point) => {
-    const centerGridX = Math.floor(e.x / gridSpacing);
-    const centerGridY = Math.floor(e.y / gridSpacing);
-
-    const startX = centerGridX - Math.floor(eraseSize / 2);
-    const endX = centerGridX + Math.floor((eraseSize - 1) / 2) + 1;
-    const startY = centerGridY - Math.floor(eraseSize / 2);
-    const endY = centerGridY + Math.floor((eraseSize - 1) / 2) + 1;
-
-    let changed = false;
-
-    for (let x = startX; x < endX; x++) {
-      for (let y = startY; y < endY; y++) {
-        if (
-          x >= 0 &&
-          y >= 0 &&
-          x * gridSpacing < imageSize.width &&
-          y * gridSpacing < imageSize.height
-        ) {
-          const pt = new Point(x, y);
-          const key = pt.toString();
-          if (!(key in revealedSquareDict.current)) {
-            revealedSquareDict.current[key] = pt;
-            changed = true;
-          }
-        }
-      }
-    }
-    if (changed) setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+  const onDrawProxy = (p: { x: number; y: number }) => {
+    handleDraw(p, eraseSize);
   };
 
-  const revealSquares = (e: Point) => {
-    toggleSquareArea(e, eraseSize);
+  const onTouchProxy = (p: { x: number; y: number }) => {
+    toggleSquareArea(p, eraseSize);
   };
 
-  const onRectErase = (start: Point, end: Point) => {
-    const minX = Math.max(0, Math.floor(Math.min(start.x, end.x) / gridSpacing));
-    const maxX = Math.min(Math.floor(imageSize.width / gridSpacing) - 1, Math.floor(Math.max(start.x, end.x) / gridSpacing));
-    const minY = Math.max(0, Math.floor(Math.min(start.y, end.y) / gridSpacing));
-    const maxY = Math.min(Math.floor(imageSize.height / gridSpacing) - 1, Math.floor(Math.max(start.y, end.y) / gridSpacing));
-
-    let changed = false;
-    for (let x = minX; x <= maxX; x++) {
-      for (let y = minY; y <= maxY; y++) {
-        const pt = new Point(x, y);
-        const key = pt.toString();
-        if (!(key in revealedSquareDict.current)) {
-          revealedSquareDict.current[key] = pt;
-          changed = true;
-        }
-      }
-    }
-    if (changed) setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
-  };
+  if (isLoading || imageSize.width === 0) {
+    return (
+      <SafeAreaView className="bg-base-200 h-full w-screen items-center justify-center">
+        <Text className="text-content-base text-xl">Loading Map...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
@@ -227,37 +164,52 @@ function MapScreen({ route }: MapScreenProps) {
           maxScale={maxScale}
           minScale={minScale}
           onScaleUpdate={(newScale) => setScale(newScale)}
-          onTouch={revealSquares}
-          onDraw={handleDraw}
+          onTouch={onTouchProxy}
+          onDraw={onDrawProxy}
           onRectSelect={onRectErase}
-          mode={interactionMode}
+          mode={
+            interactionMode === InteractionMode.GRID
+              ? InteractionMode.PAN
+              : interactionMode
+          }
         >
           <View
             style={{
               width: imageSize.width,
               height: imageSize.height,
               position: "relative",
+              opacity: isMapReady ? 1 : 0,
             }}
+            className="transition-opacity duration-300"
           >
             <Image
-              source={mapImage}
+              source={
+                typeof currentDisplayUri === "string"
+                  ? { uri: currentDisplayUri }
+                  : currentDisplayUri
+              }
               style={{
                 width: imageSize.width,
                 height: imageSize.height,
               }}
+              onLoad={() => {
+                setTimeout(() => setIsMapReady(true), 50);
+              }}
             />
             <View className="w-full h-full absolute z-20 left-0 top-0">
-              <FogShader
-                shaderSize={{
-                  width: imageSize.width,
-                  height: imageSize.height,
-                }}
-                squareSize={{
-                  width: gridSpacing,
-                  height: gridSpacing,
-                }}
-                revealedSquares={revealedSquares}
-              ></FogShader>
+              {fogOfWarVisible && (
+                <FogShader
+                  shaderSize={{
+                    width: imageSize.width,
+                    height: imageSize.height,
+                  }}
+                  squareSize={{
+                    width: gridSpacing,
+                    height: gridSpacing,
+                  }}
+                  revealedSquares={revealedSquares}
+                ></FogShader>
+              )}
             </View>
             <MapGrid
               gridSpacing={gridSpacing}
@@ -268,27 +220,22 @@ function MapScreen({ route }: MapScreenProps) {
           </View>
         </MapInteractionConnector>
 
-        {/* Draw Mode Toggle Overlay */}
-        <View className="absolute top-6 right-6 z-50 bg-base-100 p-4 rounded-xl shadow-lg opacity-90 border border-base-300">
-          <View className="flex-row gap-2">
-            <ButtonSecondary onPress={() => setInteractionMode('pan')} className={`w-24 ${interactionMode !== 'pan' ? 'opacity-50' : ''}`}>Pan</ButtonSecondary>
-            <ButtonSecondary onPress={() => setInteractionMode('draw')} className={`w-24 ${interactionMode !== 'draw' ? 'opacity-50' : ''}`}>Erase</ButtonSecondary>
-            <ButtonSecondary onPress={() => setInteractionMode('rect')} className={`w-24 ${interactionMode !== 'rect' ? 'opacity-50' : ''}`}>Rect</ButtonSecondary>
-          </View>
-          {interactionMode === 'draw' && (
-            <View className="mt-4 flex-row items-center w-full">
-              <Text className="mr-4 font-bold text-content-base">Size: {eraseSize}</Text>
-              <SliderPrimary 
-                value={eraseSize} 
-                onValueChange={setEraseSize}
-                minimumValue={1}
-                maximumValue={7}
-                step={2}
-                className="w-48"
-              />
-            </View>
-          )}
-        </View>
+        <MapControlsOverlay
+          handleSave={handleSave}
+          isEditingName={isEditingName}
+          setIsEditingName={setIsEditingName}
+          mapName={mapName}
+          setMapName={setMapName}
+          interactionMode={interactionMode}
+          setInteractionMode={setInteractionMode}
+          eraseSize={eraseSize}
+          setEraseSize={setEraseSize}
+          gridSpacing={gridSpacing}
+          setGridSpacing={setGridSpacing}
+          clearFogOfWar={clearFogOfWar}
+          fogOfWarVisible={fogOfWarVisible}
+          setFogOfWarVisible={setFogOfWarVisible}
+        />
       </View>
     </SafeAreaView>
   );

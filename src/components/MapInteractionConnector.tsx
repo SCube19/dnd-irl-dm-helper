@@ -9,7 +9,7 @@ import { MapTransformState } from "../hooks/useMapTransform";
 import { usePanZoomGesture } from "../hooks/usePanZoomGesture";
 import { useEraseGesture } from "../hooks/useEraseGesture";
 import { useRectSelectGesture } from "../hooks/useRectSelectGesture";
-import { Point } from "../types/common";
+import { Point, InteractionMode } from "../types/common";
 
 interface MapInteractionConnectorProps {
   transform: MapTransformState;
@@ -19,7 +19,7 @@ interface MapInteractionConnectorProps {
   onTouch?: (p: Point) => void;
   onDraw?: (p: Point) => void;
   onRectSelect?: (start: Point, end: Point) => void;
-  mode: "pan" | "draw" | "rect";
+  mode: InteractionMode;
   children: React.ReactNode;
 }
 
@@ -39,14 +39,14 @@ export const MapInteractionConnector = ({
     minScale,
     maxScale,
     onScaleUpdate,
-    enabled: mode === "pan",
+    enabled: mode === InteractionMode.PAN,
   });
 
   const eraseGesture = useEraseGesture({
     transform,
     onDraw,
     onTouch,
-    enabled: mode === "draw",
+    enabled: mode === InteractionMode.DRAW,
   });
 
   const rectState = {
@@ -61,7 +61,7 @@ export const MapInteractionConnector = ({
     transform,
     rectState,
     onRectSelect,
-    enabled: mode === "rect",
+    enabled: mode === InteractionMode.RECT,
   });
 
   const gestures = Gesture.Race(panZoomGesture, eraseGesture, rectSelectGesture);
@@ -83,6 +83,14 @@ export const MapInteractionConnector = ({
     transition: enableTransition.value ? "transform 0.15s ease-out" : "none",
   }));
 
+  const containerStyle = useAnimatedStyle(() => ({
+    width: containerSize.width,
+    height: containerSize.height,
+    overflow: "hidden",
+    // @ts-ignore web-only style property
+    cursor: cursor.value,
+  }));
+
   const rectStyle = useAnimatedStyle(() => ({
     display: rectState.isActive.value ? "flex" : "none",
     position: "absolute" as const,
@@ -101,15 +109,7 @@ export const MapInteractionConnector = ({
       <GestureDetector gesture={gestures}>
         <Animated.View
           ref={containerRef}
-          style={[
-            {
-              width: containerSize.width,
-              height: containerSize.height,
-              overflow: "hidden",
-              // @ts-ignore web-only style property
-              cursor: cursor,
-            },
-          ]}
+          style={containerStyle}
         >
           <Animated.View style={panZoomStyle}>
             <Animated.View>

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { View } from "react-native";
 import { useSharedValue, clamp } from "react-native-reanimated";
 import { Point } from "../types/common";
@@ -6,24 +6,50 @@ import { Point } from "../types/common";
 export function useMapTransform(
   containerSize: { width: number; height: number },
   contentSize: { width: number; height: number },
-  initialScale: number = 1
+  initialScale: number = 1,
 ) {
   const translationX = useSharedValue(
-    containerSize.width / 2 - contentSize.width / 2
+    containerSize.width / 2 - contentSize.width / 2,
   );
   const translationY = useSharedValue(
-    containerSize.height / 2 - contentSize.height / 2
+    containerSize.height / 2 - contentSize.height / 2,
   );
   const prevTranslationX = useSharedValue(0);
   const prevTranslationY = useSharedValue(0);
 
   const scale = useSharedValue(initialScale);
   const containerRef = useRef<View>(null);
+  const hasCentered = useRef(false);
 
-  const enableTransition = useSharedValue(true);
+  const enableTransition = useSharedValue(false);
   const defaultCursor = "move";
   const cursor = useSharedValue(defaultCursor);
   const cursorChangeTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Re-center ONLY ONCE when sizes change (useful for initial load where contentSize starts at 0,0)
+  useEffect(() => {
+    if (
+      contentSize.width > 0 &&
+      contentSize.height > 0 &&
+      !hasCentered.current
+    ) {
+      translationX.value =
+        containerSize.width / 2 - (contentSize.width * scale.value) / 2;
+      translationY.value =
+        containerSize.height / 2 - (contentSize.height * scale.value) / 2;
+      hasCentered.current = true;
+
+      // Delay enabling the pan zoom transition to avoid animating from 0,0 origin
+      setTimeout(() => {
+        enableTransition.value = true;
+      }, 50);
+    }
+  }, [
+    containerSize.width,
+    containerSize.height,
+    contentSize.width,
+    contentSize.height,
+  ]);
 
   function setTranslation(xValue: number, yValue: number) {
     const minPixelsVisible = 100;
@@ -42,7 +68,7 @@ export function useMapTransform(
     if (resetTimeout !== undefined) {
       cursorChangeTimer.current = setTimeout(
         () => (cursor.value = defaultCursor),
-        resetTimeout
+        resetTimeout,
       );
     }
     cursor.value = newCursor;

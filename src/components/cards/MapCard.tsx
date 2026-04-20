@@ -14,12 +14,19 @@ const MapCard = ({
   photoUri,
   mapName,
   onPress,
+  onDelete,
 }: {
   photoUri?: ImageSourcePropType;
   mapName?: string;
   onPress?: () => void;
+  onDelete?: () => void;
 }) => {
   const [show, setShow] = useState(false);
+
+  const handleDelete = (e: any) => {
+    e.stopPropagation();
+    onDelete?.();
+  };
 
   return (
     <Pressable
@@ -38,6 +45,16 @@ const MapCard = ({
               <Text className="flex h-full justify-center items-center color-base-100 font-extrabold sm:text-sm md:text-md lg:text-lg xl:text-xl text-center text-shadow-lg wrap-anywhere m-auto p-4">
                 {mapName ? mapName : "Unnamed"}
               </Text>
+            )}
+            {onDelete && (
+              <Pressable
+                onPress={handleDelete}
+                className="absolute top-2 right-2 z-30 w-8 h-8 bg-error rounded-full items-center justify-center shadow-lg active:scale-95"
+              >
+                <Text className="color-white font-bold text-lg leading-none">
+                  ×
+                </Text>
+              </Pressable>
             )}
           </View>
           <View className="absolute inset-0 w-full h-full">

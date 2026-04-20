@@ -1,11 +1,16 @@
 import React from "react";
 import { View } from "react-native";
 
-const Card = ({ children }: { children?: React.ReactNode }) => {
+const Card = ({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) => {
   return (
     <View
-      className={`
-        bg-base-100 rounded-box border-box border-base-300 p-box w-fit h-fit`}
+      className={`bg-base-100/90 p-4 rounded-2xl shadow-xl flex-col border border-base-300 pointer-events-auto  ${className}`}
     >
       {children}
     </View>

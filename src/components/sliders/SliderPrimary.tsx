@@ -1,11 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import "../../styles/global.css";
 import { View, Image } from "react-native";
-import {
-  Gesture,
-  GestureDetector,
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -34,77 +30,100 @@ const SliderPrimary = ({
   const [width, setWidth] = useState(0);
   const progress = useSharedValue(0);
   const isPressed = useSharedValue(false);
+  const lastEmittedValue = useSharedValue(value);
 
   useEffect(() => {
     const range = maximumValue - minimumValue;
     if (range > 0) {
       progress.value = (value - minimumValue) / range;
+      lastEmittedValue.value = value;
     }
   }, [value, minimumValue, maximumValue]);
 
-  const updateValue = (newProgress: number) => {
+  const onUpdateJS = useCallback(
+    (newVal: number) => {
+      onValueChange?.(newVal);
+    },
+    [onValueChange],
+  );
+
+  const handleUpdate = (x: number) => {
+    "worklet";
+    if (width <= 0) return;
+
+    const rawProgress = Math.max(0, Math.min(1, x / width));
     const range = maximumValue - minimumValue;
-    let newValue = minimumValue + newProgress * range;
+    let newValue = minimumValue + rawProgress * range;
+
     if (step > 0) {
-      newValue = Math.round(newValue / step) * step;
+      newValue =
+        minimumValue + Math.round((newValue - minimumValue) / step) * step;
     }
     newValue = Math.max(minimumValue, Math.min(maximumValue, newValue));
-    if (onValueChange) {
-      onValueChange(newValue);
+
+    // VISUAL SNAPPING: Set progress to the snapped value
+    progress.value = (newValue - minimumValue) / range;
+
+    if (newValue !== lastEmittedValue.value) {
+      lastEmittedValue.value = newValue;
+      runOnJS(onUpdateJS)(newValue);
     }
   };
 
   const pan = Gesture.Pan()
     .onBegin((e) => {
       isPressed.value = true;
-      if (width > 0) {
-        const newProgress = Math.max(0, Math.min(1, e.x / width));
-        progress.value = newProgress;
-        runOnJS(updateValue)(newProgress);
-      }
+      handleUpdate(e.x);
     })
     .onUpdate((e) => {
-      if (width > 0) {
-        const newProgress = Math.max(0, Math.min(1, e.x / width));
-        progress.value = newProgress;
-        runOnJS(updateValue)(newProgress);
-      }
+      handleUpdate(e.x);
     })
     .onEnd(() => {
       const range = maximumValue - minimumValue;
       const rawValue = minimumValue + progress.value * range;
-      const steppedValue = Math.round(rawValue / step) * step;
+      const steppedValue =
+        minimumValue + Math.round((rawValue - minimumValue) / step) * step;
       const clampedValue = Math.max(
         minimumValue,
-        Math.min(maximumValue, steppedValue)
+        Math.min(maximumValue, steppedValue),
       );
       const snappedProgress = (clampedValue - minimumValue) / range;
 
       progress.value = withTiming(snappedProgress, { duration: 100 });
-      runOnJS(updateValue)(snappedProgress);
+      if (clampedValue !== lastEmittedValue.value) {
+        lastEmittedValue.value = clampedValue;
+        runOnJS(onUpdateJS)(clampedValue);
+      }
     })
     .onFinalize(() => {
       isPressed.value = false;
     });
 
+  const tap = Gesture.Tap().onBegin((e) => {
+    handleUpdate(e.x);
+  });
+
+  const gesture = Gesture.Exclusive(pan, tap);
+
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [
-      { scale: withTiming(isPressed.value ? 1.1 : 1, { duration: 100 }) },
+      { scale: withTiming(isPressed.value ? 1.2 : 1, { duration: 100 }) },
     ],
   }));
 
   const trackStyle = useAnimatedStyle(() => ({
     width: `${progress.value * 100}%`,
+    minWidth: 16,
   }));
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, justifyContent: "center" }}>
-      <GestureDetector gesture={pan}>
-        <View
-          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-          className={`${className} h-6 justify-center`}
-        >
-          <View className="flex justify-center items-start w-full h-1.5 m-1 bg-base-300 rounded-full">
+    <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      className={`${className} h-6 justify-center`}
+    >
+      <GestureDetector gesture={gesture}>
+        <View className="h-3 w-full">
+          <View className="flex justify-center items-start w-full h-1.5 m-1 bg-base-300 rounded-full overflow-visible">
             <Animated.View
               className="flex justify-center items-end absolute h-4 bg-secondary-lighter rounded-full overflow-hidden shadow-sm"
               style={trackStyle}
@@ -123,7 +142,7 @@ const SliderPrimary = ({
           </View>
         </View>
       </GestureDetector>
-    </GestureHandlerRootView>
+    </View>
   );
 };
 
