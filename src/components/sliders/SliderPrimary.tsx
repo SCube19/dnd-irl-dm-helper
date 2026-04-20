@@ -51,7 +51,7 @@ const SliderPrimary = ({
     "worklet";
     if (width <= 0) return;
 
-    const rawProgress = Math.max(0, Math.min(1, x / width));
+    const rawProgress = Math.max(0, Math.min(1, (x - 16) / Math.max(1, width - 16)));
     const range = maximumValue - minimumValue;
     let newValue = minimumValue + rawProgress * range;
 
@@ -112,8 +112,7 @@ const SliderPrimary = ({
   }));
 
   const trackStyle = useAnimatedStyle(() => ({
-    width: `${progress.value * 100}%`,
-    minWidth: 16,
+    width: width <= 0 ? 16 : 16 + progress.value * (width - 16),
   }));
 
   return (
