@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, TextInput, Pressable } from "react-native";
 import ButtonPrimary from "./buttons/ButtonPrimary";
 import ButtonSecondary from "./buttons/ButtonSecondary";
@@ -6,6 +6,7 @@ import SliderPrimary from "./sliders/SliderPrimary";
 import { InteractionMode } from "../types/common";
 import SwitchPrimary from "./switches/SwitchPrimary";
 import Card from "./cards/Card";
+import { ViewerRole } from "../types/entity";
 
 export interface MapControlsOverlayProps {
   handleSave: () => void;
@@ -22,6 +23,8 @@ export interface MapControlsOverlayProps {
   clearFogOfWar: () => void;
   fogOfWarVisible: boolean;
   setFogOfWarVisible: (visible: boolean) => void;
+  viewerRole?: ViewerRole;
+  setViewerRole?: (role: ViewerRole) => void;
 }
 
 export const MapControlsOverlay = ({
@@ -39,6 +42,8 @@ export const MapControlsOverlay = ({
   clearFogOfWar,
   fogOfWarVisible,
   setFogOfWarVisible,
+  viewerRole = "dm",
+  setViewerRole,
 }: MapControlsOverlayProps) => {
   return (
     <View className="absolute top-6 left-6 right-6 z-50 flex-row justify-between items-start pointer-events-none">
@@ -66,14 +71,31 @@ export const MapControlsOverlay = ({
         </View>
       </View>
 
-      {/* Draw Mode Toggle Overlay */}
+      {/* Fog, Role & Draw Mode Controls */}
       <View className="flex-row items-center gap-4">
-        <Card>
+        <Card className="flex-row items-center gap-3 px-3 py-2 pointer-events-auto">
           <SwitchPrimary
             value={fogOfWarVisible}
             onValueChange={setFogOfWarVisible}
           />
+          {setViewerRole && (
+            <Pressable
+              onPress={() =>
+                setViewerRole(viewerRole === "dm" ? "player" : "dm")
+              }
+              className={`px-3 py-1.5 rounded-xl border ${
+                viewerRole === "dm"
+                  ? "bg-secondary/20 border-secondary/50"
+                  : "bg-base-300/60 border-base-300"
+              }`}
+            >
+              <Text className="text-xs font-bold text-content-base">
+                {viewerRole === "dm" ? "👁️ DM View" : "👥 Player View"}
+              </Text>
+            </Pressable>
+          )}
         </Card>
+
         <Card className="p-4 pointer-events-auto items-end gap-4 max-w-sm">
           {/* Interaction Modes */}
           <View className="flex-row gap-0">

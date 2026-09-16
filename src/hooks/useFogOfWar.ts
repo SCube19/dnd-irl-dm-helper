@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from "react";
-import { Point } from "../types/common";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Point, pointKey } from "../types/common";
 
+// TODO: Next optimization step is to use delta updates instead of full set updates
 export function useFogOfWar(
   imageSize: { width: number; height: number },
   initialGridSpacing: number = 15,
@@ -9,22 +10,69 @@ export function useFogOfWar(
   const [revealedSquares, setRevealedSquares] = useState<Set<Point>>(new Set());
   const revealedSquareDict = useRef<Record<string, Point>>({});
 
+  const rafIdRef = useRef<number | null>(null);
+  const isDirtyRef = useRef(false);
+  const frameCountRef = useRef(0);
+
+  const commitUpdates = useCallback(() => {
+    if (isDirtyRef.current) {
+      isDirtyRef.current = false;
+      setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+    }
+    rafIdRef.current = null;
+    frameCountRef.current = 0;
+  }, []);
+
+  const scheduleCommit = useCallback(() => {
+    isDirtyRef.current = true;
+
+    if (rafIdRef.current === null) {
+      frameCountRef.current = 0;
+
+      const step = () => {
+        frameCountRef.current += 1;
+        if (frameCountRef.current >= 4) commitUpdates();
+        else rafIdRef.current = requestAnimationFrame(step);
+      };
+
+      rafIdRef.current = requestAnimationFrame(step);
+    }
+  }, [commitUpdates]);
+
+  const cancelAnimation = useCallback(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    isDirtyRef.current = false;
+    frameCountRef.current = 0;
+  }, []);
+
+  // Clean up any pending animation frame on unmount
+  useEffect(() => {
+    return () => {
+      cancelAnimation();
+    };
+  }, [cancelAnimation]);
+
   const loadInitialSquares = useCallback(
     (points: { x: number; y: number }[]) => {
+      cancelAnimation();
       revealedSquareDict.current = {};
       const typedPoints = points.map((p) => new Point(p.x, p.y));
       typedPoints.forEach((pt) => {
-        revealedSquareDict.current[pt.toString()] = pt;
+        revealedSquareDict.current[pointKey(pt.x, pt.y)] = pt;
       });
       setRevealedSquares(new Set(typedPoints));
     },
-    [],
+    [cancelAnimation, pointKey],
   );
 
   const clearFogOfWar = useCallback(() => {
+    cancelAnimation();
     revealedSquareDict.current = {};
     setRevealedSquares(new Set());
-  }, []);
+  }, [cancelAnimation]);
 
   const getRevealedSquareValues = useCallback(() => {
     return Object.values(revealedSquareDict.current);
@@ -36,8 +84,7 @@ export function useFogOfWar(
 
       const centerGridX = Math.floor(centerPoint.x / gridSpacing);
       const centerGridY = Math.floor(centerPoint.y / gridSpacing);
-
-      const centerKey = new Point(centerGridX, centerGridY).toString();
+      const centerKey = pointKey(centerGridX, centerGridY);
       const isAdding = !(centerKey in revealedSquareDict.current);
 
       const startX = centerGridX - Math.floor(size / 2);
@@ -55,11 +102,10 @@ export function useFogOfWar(
             x * gridSpacing < imageSize.width &&
             y * gridSpacing < imageSize.height
           ) {
-            const pt = new Point(x, y);
-            const key = pt.toString();
+            const key = pointKey(x, y);
             if (isAdding) {
               if (!(key in revealedSquareDict.current)) {
-                revealedSquareDict.current[key] = pt;
+                revealedSquareDict.current[key] = new Point(x, y);
                 changed = true;
               }
             } else {
@@ -100,19 +146,19 @@ export function useFogOfWar(
             x * gridSpacing < imageSize.width &&
             y * gridSpacing < imageSize.height
           ) {
-            const pt = new Point(x, y);
-            const key = pt.toString();
+            const key = pointKey(x, y);
             if (!(key in revealedSquareDict.current)) {
-              revealedSquareDict.current[key] = pt;
+              revealedSquareDict.current[key] = new Point(x, y);
               changed = true;
             }
           }
         }
       }
-      if (changed)
-        setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+
+      // Batch state update with requestAnimationFrame to maintain 60/120 FPS
+      if (changed) scheduleCommit();
     },
-    [gridSpacing, imageSize],
+    [gridSpacing, imageSize, scheduleCommit],
   );
 
   const onRectErase = useCallback(
@@ -139,10 +185,9 @@ export function useFogOfWar(
       let changed = false;
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
-          const pt = new Point(x, y);
-          const key = pt.toString();
+          const key = pointKey(x, y);
           if (!(key in revealedSquareDict.current)) {
-            revealedSquareDict.current[key] = pt;
+            revealedSquareDict.current[key] = new Point(x, y);
             changed = true;
           }
         }

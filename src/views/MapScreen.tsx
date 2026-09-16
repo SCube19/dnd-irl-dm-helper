@@ -15,6 +15,7 @@ import { useMapTransform } from "../hooks/useMapTransform";
 import { useFogOfWar } from "../hooks/useFogOfWar";
 import * as MapDataStorage from "../utils/MapDataStorage";
 import { InteractionMode } from "../types/common";
+import { ViewerRole } from "../types/entity";
 
 interface MapScreenProps {
   route: any;
@@ -47,6 +48,7 @@ function MapScreen({ route }: MapScreenProps) {
   const gridColor: string = "#ddddddb0";
 
   const [fogOfWarVisible, setFogOfWarVisible] = useState<boolean>(true);
+  const [viewerRole, setViewerRole] = useState<ViewerRole>("dm");
 
   const {
     gridSpacing,
@@ -208,7 +210,8 @@ function MapScreen({ route }: MapScreenProps) {
                     height: gridSpacing,
                   }}
                   revealedSquares={revealedSquares}
-                ></FogShader>
+                  fogOpacity={viewerRole === "dm" ? 0.35 : 1.0}
+                />
               )}
             </View>
             <MapGrid
@@ -216,7 +219,7 @@ function MapScreen({ route }: MapScreenProps) {
               color={gridColor}
               gridSize={{ width: imageSize.width, height: imageSize.height }}
               scale={scale}
-            ></MapGrid>
+            />
           </View>
         </MapInteractionConnector>
 
@@ -235,6 +238,8 @@ function MapScreen({ route }: MapScreenProps) {
           clearFogOfWar={clearFogOfWar}
           fogOfWarVisible={fogOfWarVisible}
           setFogOfWarVisible={setFogOfWarVisible}
+          viewerRole={viewerRole}
+          setViewerRole={setViewerRole}
         />
       </View>
     </SafeAreaView>

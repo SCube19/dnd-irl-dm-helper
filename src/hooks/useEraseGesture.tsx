@@ -21,10 +21,10 @@ export function useEraseGesture({
     .enabled(enabled)
     .minDistance(1)
     .onStart((event) => {
-      onDraw?.(getContentPoint({ x: event.absoluteX, y: event.absoluteY }));
+      onDraw?.(getContentPoint({ x: event.x, y: event.y }));
     })
     .onUpdate((event) => {
-      onDraw?.(getContentPoint({ x: event.absoluteX, y: event.absoluteY }));
+      onDraw?.(getContentPoint({ x: event.x, y: event.y }));
     })
     .runOnJS(true);
 
@@ -32,7 +32,7 @@ export function useEraseGesture({
     .enabled(enabled)
     .maxDuration(250)
     .onStart((event) => {
-      onTouch?.(getContentPoint({ x: event.absoluteX, y: event.absoluteY }));
+      onTouch?.(getContentPoint({ x: event.x, y: event.y }));
     })
     .runOnJS(true);
 

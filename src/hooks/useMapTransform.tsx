@@ -1,7 +1,12 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { View } from "react-native";
 import { useSharedValue, clamp } from "react-native-reanimated";
 import { Point } from "../types/common";
+import {
+  measureElement,
+  screenToContainer,
+  BoundingBox,
+} from "../utils/platform";
 
 export function useMapTransform(
   containerSize: { width: number; height: number },
@@ -20,6 +25,26 @@ export function useMapTransform(
   const scale = useSharedValue(initialScale);
   const containerRef = useRef<View>(null);
   const hasCentered = useRef(false);
+
+  // Auto-tracked on-screen bounds for native window coordinate conversion
+  const containerBounds = useRef<BoundingBox>({
+    left: 0,
+    top: 0,
+    width: containerSize.width,
+    height: containerSize.height,
+  });
+
+  const updateContainerBounds = useCallback(() => {
+    measureElement(containerRef.current, (box) => {
+      if (box) {
+        containerBounds.current = box;
+      }
+    });
+  }, []);
+
+  const onContainerLayout = useCallback(() => {
+    updateContainerBounds();
+  }, [updateContainerBounds]);
 
   const enableTransition = useSharedValue(false);
   const defaultCursor = "move";
@@ -49,6 +74,10 @@ export function useMapTransform(
     containerSize.height,
     contentSize.width,
     contentSize.height,
+    scale,
+    translationX,
+    translationY,
+    enableTransition,
   ]);
 
   function setTranslation(xValue: number, yValue: number) {
@@ -74,19 +103,30 @@ export function useMapTransform(
     cursor.value = newCursor;
   }
 
-  const getContainerPoint = (absolute: Point): Point => {
-    const rect = (containerRef.current as any)?.getBoundingClientRect?.();
-    if (!rect) return absolute; // fallback
-    const containerX = clamp(absolute.x - rect.left, 0, rect.width);
-    const containerY = clamp(absolute.y - rect.top, 0, rect.height);
-    return { x: containerX, y: containerY };
+  /**
+   * Converts absolute screen coordinates (such as browser WheelEvent clientX/Y)
+   * into coordinates relative to this container view.
+   */
+  const getContainerPoint = (screenPoint: Point): Point => {
+    return screenToContainer(screenPoint, containerRef.current, containerBounds.current);
   };
 
-  const getContentPoint = (absolute: Point): Point => {
-    const containerPoint = getContainerPoint(absolute);
+  /**
+   * Converts container-relative coordinates into content coordinates (accounting for pan & zoom).
+   * Note: Touch coordinates from gesture events (event.x, event.y) are ALREADY container-relative.
+   */
+  const getContentPoint = (containerPoint: Point): Point => {
     const contentX = (containerPoint.x - translationX.value) / scale.value;
     const contentY = (containerPoint.y - translationY.value) / scale.value;
-    return { x: contentX, y: contentY };
+    return new Point(contentX, contentY);
+  };
+
+  /**
+   * Convenience helper to convert absolute screen coordinates all the way to content coordinates.
+   */
+  const screenToContentPoint = (screenPoint: Point): Point => {
+    const containerPoint = getContainerPoint(screenPoint);
+    return getContentPoint(containerPoint);
   };
 
   return {
@@ -100,8 +140,10 @@ export function useMapTransform(
     cursor,
     setTranslation,
     setCursor,
+    onContainerLayout,
     getContainerPoint,
     getContentPoint,
+    screenToContentPoint,
     containerSize,
     contentSize,
   };

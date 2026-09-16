@@ -30,7 +30,7 @@ export function useRectSelectGesture({
     .enabled(enabled)
     .minDistance(1)
     .onStart((event) => {
-      const pt = getContentPoint({ x: event.absoluteX, y: event.absoluteY });
+      const pt = getContentPoint({ x: event.x, y: event.y });
       rectState.isActive.value = true;
       rectState.startX.value = pt.x;
       rectState.startY.value = pt.y;
@@ -38,7 +38,7 @@ export function useRectSelectGesture({
       rectState.currentY.value = pt.y;
     })
     .onUpdate((event) => {
-      const pt = getContentPoint({ x: event.absoluteX, y: event.absoluteY });
+      const pt = getContentPoint({ x: event.x, y: event.y });
       rectState.currentX.value = pt.x;
       rectState.currentY.value = pt.y;
     })

@@ -1,4 +1,5 @@
 import React from "react";
+import { Platform } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import {
   Gesture,
@@ -70,25 +71,25 @@ export const MapInteractionConnector = ({
     translationX,
     translationY,
     scale,
-    enableTransition,
     cursor,
     containerRef,
     containerSize,
   } = transform;
 
   const panZoomStyle = useAnimatedStyle(() => ({
-    // @ts-ignore Ignore React Native's lack of support for template string transforms in some older TS definitions
-    transform: `translate(${translationX.value}px, ${translationY.value}px) scale(${scale.value})`,
-    transformOrigin: "0 0",
-    transition: enableTransition.value ? "transform 0.15s ease-out" : "none",
+    transform: [
+      { translateX: translationX.value },
+      { translateY: translationY.value },
+      { scale: scale.value },
+    ],
+    transformOrigin: "0 0" as const,
   }));
 
   const containerStyle = useAnimatedStyle(() => ({
     width: containerSize.width,
     height: containerSize.height,
-    overflow: "hidden",
-    // @ts-ignore web-only style property
-    cursor: cursor.value,
+    overflow: "hidden" as const,
+    ...(Platform.OS === "web" ? { cursor: cursor.value as any } : {}),
   }));
 
   const rectStyle = useAnimatedStyle(() => ({
@@ -110,6 +111,7 @@ export const MapInteractionConnector = ({
         <Animated.View
           ref={containerRef}
           style={containerStyle}
+          onLayout={transform.onContainerLayout}
         >
           <Animated.View style={panZoomStyle}>
             <Animated.View>

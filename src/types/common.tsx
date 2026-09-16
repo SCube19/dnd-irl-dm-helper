@@ -15,6 +15,19 @@ export interface Measure {
   height: number;
 }
 
+/**
+ * Standardized key generator for 2D points/grid coordinates.
+ * Supports both pointKey(x, y) and pointKey(point).
+ */
+export function pointKey(x: number, y: number): string;
+export function pointKey(point: XY): string;
+export function pointKey(xOrPoint: number | XY, maybeY?: number): string {
+  if (typeof xOrPoint === "number") {
+    return `${xOrPoint}|${maybeY}`;
+  }
+  return `${xOrPoint.x}|${xOrPoint.y}`;
+}
+
 export class Point implements XY {
   x: number;
   y: number;
@@ -25,6 +38,6 @@ export class Point implements XY {
   }
 
   public toString(): string {
-    return `${this.x}|${this.y}`;
+    return pointKey(this.x, this.y);
   }
 }
