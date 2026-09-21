@@ -14,7 +14,7 @@ import FogShader from "../shaders/FogShader";
 import { useMapTransform } from "../hooks/useMapTransform";
 import { useFogOfWar } from "../hooks/useFogOfWar";
 import * as MapDataStorage from "../utils/MapDataStorage";
-import { InteractionMode } from "../types/common";
+import { InteractionMode, Point, Measure } from "../types/common";
 import { ViewerRole } from "../types/entity";
 
 interface MapScreenProps {
@@ -53,13 +53,12 @@ function MapScreen({ route }: MapScreenProps) {
   const {
     gridSpacing,
     setGridSpacing,
-    revealedSquares,
-    loadInitialSquares,
-    toggleSquareArea,
-    handleDraw,
-    onRectErase,
-    getRevealedSquareValues,
-    clearFogOfWar,
+    gridWidth,
+    gridHeight,
+    revealTexture,
+    handleReveal,
+    handleHide,
+    resetFogOfWar,
   } = useFogOfWar(imageSize, 15);
 
   // Load initial data
@@ -99,12 +98,17 @@ function MapScreen({ route }: MapScreenProps) {
       setImageSize(calculatedSize);
       setGridSpacing(session.gridSpacing || 15);
       setMapName(session.name || "Unnamed Map");
-      loadInitialSquares(session.revealedSquares);
+      if (session.revealedSquares && session.revealedSquares.length > 0) {
+        const points = session.revealedSquares;
+        for (const p of points) {
+          handleReveal(new Point(p.x, p.y), { width: 1, height: 1 });
+        }
+      }
       setIsLoading(false);
     };
 
     loadInit();
-  }, [mapUri, setGridSpacing, loadInitialSquares]);
+  }, [mapUri, setGridSpacing, handleReveal]);
 
   const mapTransform = useMapTransform(
     containerSize,
@@ -126,9 +130,18 @@ function MapScreen({ route }: MapScreenProps) {
 
   const handleSave = async () => {
     if (!mapUri) return;
+    // Extract revealed squares from mapBuffer for persistence
+    const revealedPoints: { x: number; y: number }[] = [];
+    for (let y = 0; y < gridHeight; y++) {
+      for (let x = 0; x < gridWidth; x++) {
+        if (mapBuffer[y * gridWidth + x] === 255) {
+          revealedPoints.push({ x, y });
+        }
+      }
+    }
     await MapDataStorage.saveMapData(mapUri, {
       name: mapName,
-      revealedSquares: getRevealedSquareValues(),
+      revealedSquares: revealedPoints,
       gridSpacing: gridSpacing,
       imageUri: currentDisplayUri,
     });
@@ -137,11 +150,27 @@ function MapScreen({ route }: MapScreenProps) {
   };
 
   const onDrawProxy = (p: { x: number; y: number }) => {
-    handleDraw(p, eraseSize);
+    const centerGridX = Math.floor(p.x / gridSpacing);
+    const centerGridY = Math.floor(p.y / gridSpacing);
+    const half = Math.floor(eraseSize / 2);
+    handleReveal(new Point(centerGridX - half, centerGridY - half), {
+      width: eraseSize,
+      height: eraseSize,
+    });
   };
 
   const onTouchProxy = (p: { x: number; y: number }) => {
-    toggleSquareArea(p, eraseSize);
+    const centerGridX = Math.floor(p.x / gridSpacing);
+    const centerGridY = Math.floor(p.y / gridSpacing);
+    const half = Math.floor(eraseSize / 2);
+    // Toggle: if center cell is revealed, hide; otherwise reveal
+    const centerIndex = centerGridY * gridWidth + centerGridX;
+    const isRevealed = false;
+    const handler = isRevealed ? handleHide : handleReveal;
+    handler(new Point(centerGridX - half, centerGridY - half), {
+      width: eraseSize,
+      height: eraseSize,
+    });
   };
 
   if (isLoading || imageSize.width === 0) {
@@ -168,7 +197,16 @@ function MapScreen({ route }: MapScreenProps) {
           onScaleUpdate={(newScale) => setScale(newScale)}
           onTouch={onTouchProxy}
           onDraw={onDrawProxy}
-          onRectSelect={onRectErase}
+          onRectSelect={(start: any, end: any) => {
+            const minX = Math.floor(Math.min(start.x, end.x) / gridSpacing);
+            const minY = Math.floor(Math.min(start.y, end.y) / gridSpacing);
+            const maxX = Math.floor(Math.max(start.x, end.x) / gridSpacing);
+            const maxY = Math.floor(Math.max(start.y, end.y) / gridSpacing);
+            handleReveal(new Point(minX, minY), {
+              width: maxX - minX + 1,
+              height: maxY - minY + 1,
+            });
+          }}
           mode={
             interactionMode === InteractionMode.GRID
               ? InteractionMode.PAN
@@ -209,7 +247,7 @@ function MapScreen({ route }: MapScreenProps) {
                     width: gridSpacing,
                     height: gridSpacing,
                   }}
-                  revealedSquares={revealedSquares}
+                  revealTexture={revealTexture}
                   fogOpacity={viewerRole === "dm" ? 0.35 : 1.0}
                 />
               )}
@@ -235,7 +273,7 @@ function MapScreen({ route }: MapScreenProps) {
           setEraseSize={setEraseSize}
           gridSpacing={gridSpacing}
           setGridSpacing={setGridSpacing}
-          clearFogOfWar={clearFogOfWar}
+          clearFogOfWar={resetFogOfWar}
           fogOfWarVisible={fogOfWarVisible}
           setFogOfWarVisible={setFogOfWarVisible}
           viewerRole={viewerRole}

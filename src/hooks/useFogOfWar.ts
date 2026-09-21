@@ -1,212 +1,156 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Point, pointKey } from "../types/common";
 
-// TODO: Next optimization step is to use delta updates instead of full set updates
+import {
+  Skia,
+  SkSurface,
+  SkPaint,
+  SkImage,
+  BlendMode,
+} from "@shopify/react-native-skia";
+
+import { Point, Measure } from "../types/common";
+
 export function useFogOfWar(
   imageSize: { width: number; height: number },
   initialGridSpacing: number = 15,
 ) {
   const [gridSpacing, setGridSpacing] = useState<number>(initialGridSpacing);
-  const [revealedSquares, setRevealedSquares] = useState<Set<Point>>(new Set());
-  const revealedSquareDict = useRef<Record<string, Point>>({});
+
+  const gridWidth = Math.max(1, Math.ceil(imageSize.width / gridSpacing));
+  const gridHeight = Math.max(1, Math.ceil(imageSize.height / gridSpacing));
+  const revealTextureRef = useRef<SkSurface | null>(null);
+  const [revealImage, setRevealImage] = useState<SkImage | null>(null);
+  const texturePaintRef = useRef<SkPaint>(Skia.Paint());
+  const prevDimRef = useRef({ w: 0, h: 0 });
 
   const rafIdRef = useRef<number | null>(null);
-  const isDirtyRef = useRef(false);
-  const frameCountRef = useRef(0);
+  const isDirtyRef = useRef<boolean>(false);
 
-  const commitUpdates = useCallback(() => {
-    if (isDirtyRef.current) {
-      isDirtyRef.current = false;
-      setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
-    }
-    rafIdRef.current = null;
-    frameCountRef.current = 0;
-  }, []);
+  const hideColor: string = "#00000000"; // Black color for hidden areas
 
-  const scheduleCommit = useCallback(() => {
-    isDirtyRef.current = true;
+  if (
+    prevDimRef.current.w !== gridWidth ||
+    prevDimRef.current.h !== gridHeight
+  ) {
+    const newTexture = Skia.Surface.Make(gridWidth, gridHeight);
+    if (!newTexture) throw new Error("Failed to create offscreen surface");
 
-    if (rafIdRef.current === null) {
-      frameCountRef.current = 0;
-
-      const step = () => {
-        frameCountRef.current += 1;
-        if (frameCountRef.current >= 4) commitUpdates();
-        else rafIdRef.current = requestAnimationFrame(step);
+    if (revealTextureRef.current) {
+      const newCanvas = newTexture.getCanvas();
+      const { xRatio, yRatio } = {
+        xRatio: gridWidth / prevDimRef.current.w,
+        yRatio: gridHeight / prevDimRef.current.h,
       };
-
-      rafIdRef.current = requestAnimationFrame(step);
+      newCanvas.save();
+      newCanvas.scale(xRatio, yRatio);
+      newCanvas.drawImage(revealTextureRef.current.makeImageSnapshot(), 0, 0);
+      newCanvas.restore();
+    } else {
+      newTexture.getCanvas().drawColor(Skia.Color(hideColor));
     }
-  }, [commitUpdates]);
 
-  const cancelAnimation = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    isDirtyRef.current = false;
-    frameCountRef.current = 0;
-  }, []);
+    revealTextureRef.current = newTexture;
+    setRevealImage(newTexture.makeImageSnapshot());
+    prevDimRef.current = { w: gridWidth, h: gridHeight };
+  }
 
-  // Clean up any pending animation frame on unmount
   useEffect(() => {
     return () => {
-      cancelAnimation();
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
     };
-  }, [cancelAnimation]);
-
-  const loadInitialSquares = useCallback(
-    (points: { x: number; y: number }[]) => {
-      cancelAnimation();
-      revealedSquareDict.current = {};
-      const typedPoints = points.map((p) => new Point(p.x, p.y));
-      typedPoints.forEach((pt) => {
-        revealedSquareDict.current[pointKey(pt.x, pt.y)] = pt;
-      });
-      setRevealedSquares(new Set(typedPoints));
-    },
-    [cancelAnimation, pointKey],
-  );
-
-  const clearFogOfWar = useCallback(() => {
-    cancelAnimation();
-    revealedSquareDict.current = {};
-    setRevealedSquares(new Set());
-  }, [cancelAnimation]);
-
-  const getRevealedSquareValues = useCallback(() => {
-    return Object.values(revealedSquareDict.current);
   }, []);
 
-  const toggleSquareArea = useCallback(
-    (centerPoint: Point, size: number) => {
-      if (imageSize.width === 0) return;
+  const scheduleFrameUpdate = useCallback(() => {
+    isDirtyRef.current = true;
+    if (rafIdRef.current !== null) return;
 
-      const centerGridX = Math.floor(centerPoint.x / gridSpacing);
-      const centerGridY = Math.floor(centerPoint.y / gridSpacing);
-      const centerKey = pointKey(centerGridX, centerGridY);
-      const isAdding = !(centerKey in revealedSquareDict.current);
-
-      const startX = centerGridX - Math.floor(size / 2);
-      const endX = centerGridX + Math.floor((size - 1) / 2) + 1;
-      const startY = centerGridY - Math.floor(size / 2);
-      const endY = centerGridY + Math.floor((size - 1) / 2) + 1;
-
-      let changed = false;
-
-      for (let x = startX; x < endX; x++) {
-        for (let y = startY; y < endY; y++) {
-          if (
-            x >= 0 &&
-            y >= 0 &&
-            x * gridSpacing < imageSize.width &&
-            y * gridSpacing < imageSize.height
-          ) {
-            const key = pointKey(x, y);
-            if (isAdding) {
-              if (!(key in revealedSquareDict.current)) {
-                revealedSquareDict.current[key] = new Point(x, y);
-                changed = true;
-              }
-            } else {
-              if (key in revealedSquareDict.current) {
-                delete revealedSquareDict.current[key];
-                changed = true;
-              }
-            }
-          }
-        }
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      if (isDirtyRef.current && revealTextureRef.current) {
+        isDirtyRef.current = false;
+        setRevealImage(revealTextureRef.current.makeImageSnapshot());
       }
+    });
+  }, []);
 
-      if (changed)
-        setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+  const normalizeCoords: (
+    start: Point,
+    dim: Measure,
+  ) => { start: Point; dim: Point } = useCallback(
+    (start, dim) => {
+      const startX = Math.max(0, Math.floor(start.x));
+      const startY = Math.max(0, Math.floor(start.y));
+      const endX = Math.min(gridWidth, Math.ceil(start.x + dim.width));
+      const endY = Math.min(gridHeight, Math.ceil(start.y + dim.height));
+      return {
+        start: { x: startX, y: startY },
+        dim: { x: endX - startX, y: endY - startY },
+      };
     },
-    [gridSpacing, imageSize],
+    [gridWidth, gridHeight],
   );
 
-  const handleDraw = useCallback(
-    (e: Point, eraseSize: number) => {
-      if (imageSize.width === 0) return;
+  const drawRectToTexture = useCallback(
+    (coord: Point, dim: Measure, action: "reveal" | "hide") => {
+      if (!revealTextureRef.current) return;
 
-      const centerGridX = Math.floor(e.x / gridSpacing);
-      const centerGridY = Math.floor(e.y / gridSpacing);
-
-      const startX = centerGridX - Math.floor(eraseSize / 2);
-      const endX = centerGridX + Math.floor((eraseSize - 1) / 2) + 1;
-      const startY = centerGridY - Math.floor(eraseSize / 2);
-      const endY = centerGridY + Math.floor((eraseSize - 1) / 2) + 1;
-
-      let changed = false;
-
-      for (let x = startX; x < endX; x++) {
-        for (let y = startY; y < endY; y++) {
-          if (
-            x >= 0 &&
-            y >= 0 &&
-            x * gridSpacing < imageSize.width &&
-            y * gridSpacing < imageSize.height
-          ) {
-            const key = pointKey(x, y);
-            if (!(key in revealedSquareDict.current)) {
-              revealedSquareDict.current[key] = new Point(x, y);
-              changed = true;
-            }
-          }
-        }
+      const { start, dim: normalizedDim } = normalizeCoords(coord, dim);
+      const canvas = revealTextureRef.current.getCanvas();
+      const paint = texturePaintRef.current;
+      if (action === "hide") {
+        paint.setColor(Skia.Color(hideColor));
+        paint.setBlendMode(BlendMode.Src);
+      } else {
+        const timeMs = Math.floor(performance.now()) % 65025;
+        const r = Math.floor(timeMs / 255);
+        const g = timeMs % 255;
+        paint.setColor(Skia.Color(`rgba(${r}, ${g}, 0, 1.0)`));
+        paint.setBlendMode(BlendMode.DstOver);
       }
 
-      // Batch state update with requestAnimationFrame to maintain 60/120 FPS
-      if (changed) scheduleCommit();
+      canvas.drawRect(
+        Skia.XYWHRect(start.x, start.y, normalizedDim.x, normalizedDim.y),
+        paint,
+      );
+
+      scheduleFrameUpdate();
     },
-    [gridSpacing, imageSize, scheduleCommit],
+    [normalizeCoords, scheduleFrameUpdate],
   );
 
-  const onRectErase = useCallback(
-    (start: Point, end: Point) => {
-      if (imageSize.width === 0) return;
+  // --- public API ---
+  const resetFogOfWar = useCallback(() => {
+    drawRectToTexture(
+      { x: 0, y: 0 },
+      { width: gridWidth, height: gridHeight },
+      "hide",
+    );
+  }, [drawRectToTexture, gridWidth, gridHeight]);
 
-      const minX = Math.max(
-        0,
-        Math.floor(Math.min(start.x, end.x) / gridSpacing),
-      );
-      const maxX = Math.min(
-        Math.floor(imageSize.width / gridSpacing) - 1,
-        Math.floor(Math.max(start.x, end.x) / gridSpacing),
-      );
-      const minY = Math.max(
-        0,
-        Math.floor(Math.min(start.y, end.y) / gridSpacing),
-      );
-      const maxY = Math.min(
-        Math.floor(imageSize.height / gridSpacing) - 1,
-        Math.floor(Math.max(start.y, end.y) / gridSpacing),
-      );
-
-      let changed = false;
-      for (let x = minX; x <= maxX; x++) {
-        for (let y = minY; y <= maxY; y++) {
-          const key = pointKey(x, y);
-          if (!(key in revealedSquareDict.current)) {
-            revealedSquareDict.current[key] = new Point(x, y);
-            changed = true;
-          }
-        }
-      }
-      if (changed)
-        setRevealedSquares(new Set(Object.values(revealedSquareDict.current)));
+  const handleReveal = useCallback(
+    (coord: Point, dim: Measure) => {
+      drawRectToTexture(coord, dim, "reveal");
     },
-    [gridSpacing, imageSize],
+    [drawRectToTexture],
+  );
+
+  const handleHide = useCallback(
+    (coord: Point, dim: Measure) => {
+      drawRectToTexture(coord, dim, "hide");
+    },
+    [drawRectToTexture],
   );
 
   return {
     gridSpacing,
     setGridSpacing,
-    revealedSquares,
-    loadInitialSquares,
-    toggleSquareArea,
-    handleDraw,
-    onRectErase,
-    getRevealedSquareValues,
-    clearFogOfWar,
+    gridWidth,
+    gridHeight,
+    revealTexture: revealImage,
+    handleReveal,
+    handleHide,
+    resetFogOfWar,
   };
 }
