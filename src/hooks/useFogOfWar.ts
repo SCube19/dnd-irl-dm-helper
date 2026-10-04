@@ -26,7 +26,7 @@ export function useFogOfWar(
   const rafIdRef = useRef<number | null>(null);
   const isDirtyRef = useRef<boolean>(false);
 
-  const hideColor: string = "#00000000"; // Black color for hidden areas
+  const hideColor: string = "#00000000"; // Transparent 0 color for hidden areas
 
   if (
     prevDimRef.current.w !== gridWidth ||
@@ -92,6 +92,15 @@ export function useFogOfWar(
     [gridWidth, gridHeight],
   );
 
+  function rgb24Split(value24: number): Float32Array {
+    return new Float32Array([
+      ((value24 >>> 16) & 0xff) / 255.0,
+      ((value24 >>> 8) & 0xff) / 255.0,
+      (value24 & 0xff) / 255.0,
+      1.0, // alpha MUST be 1.0 — premultiplication is a no-op at 1.0
+    ]);
+  }
+
   const drawRectToTexture = useCallback(
     (coord: Point, dim: Measure, action: "reveal" | "hide") => {
       if (!revealTextureRef.current) return;
@@ -99,14 +108,16 @@ export function useFogOfWar(
       const { start, dim: normalizedDim } = normalizeCoords(coord, dim);
       const canvas = revealTextureRef.current.getCanvas();
       const paint = texturePaintRef.current;
+
       if (action === "hide") {
-        paint.setColor(Skia.Color(hideColor));
+        paint.setColor(new Float32Array([0.0, 0.0, 0.0, 0.0]));
         paint.setBlendMode(BlendMode.Src);
       } else {
-        const timeMs = Math.floor(performance.now()) % 65025;
-        const r = Math.floor(timeMs / 255);
-        const g = timeMs % 255;
-        paint.setColor(Skia.Color(`rgba(${r}, ${g}, 0, 1.0)`));
+        // Skia surfaces use premultiplied alpha internally.
+        // Any alpha < 1.0 causes stored_R = R * alpha, stored_G = G * alpha, etc.
+        // — which corrupts the timestamp decode in the shader.
+        const timeMs = Math.floor(performance.now() % 16777216); // cap at 24 bits
+        paint.setColor(rgb24Split(timeMs));
         paint.setBlendMode(BlendMode.DstOver);
       }
 
