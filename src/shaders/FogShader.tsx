@@ -14,6 +14,7 @@ import {
   useSharedValue,
   useDerivedValue,
   useFrameCallback,
+  type SharedValue,
 } from "react-native-reanimated";
 import { Measure } from "../types/common";
 
@@ -65,26 +66,55 @@ vec2 getRevealData(vec2 coord) {
     float b = floor(sample.b * 255.0 + 0.5);
     
     // Decode 24-bit timestamp from R,G,B only (A is always 1.0).
-    // 24 bits = up to 16,777,215 ms ≈ 4.6 hours per session.
     float revealTimeMs = (r * 65536.0) + (g * 256.0) + b;
     
     float timeDiff = max(0.0, iTime / 1000.0 - revealTimeMs / 1000.0);
     
-    float mask = clamp(timeDiff / 0.4, 0.0, 1.0);
-    float blowout = 1.0;
+    float mask = clamp(timeDiff / 0.3, 0.0, 1.0);
+    float blowout = sin(mask * 3.14159265);
     
     return vec2(mask, blowout);
 }
 
 // -----------------------------------------------------------
-// STEP 2: EXACT PIXEL MAPPING (NO BILINEAR)
+// STEP 2: PIXEL MAPPING WITH NOISY FEATHERED EDGES
 // -----------------------------------------------------------
-vec2 getExactRevealState(vec2 worldCoord) {
+vec2 getFeatheredRevealState(vec2 worldCoord) {
     vec2 pos = worldCoord / u_squareSize;
     
-    vec2 tileCenter = floor(pos) + vec2(0.5);
+    // Organic spatial noise warping on tile coordinates
+    vec2 uvNoise = vec2(
+        fbm(pos * 0.75 + vec2(1.7, 9.2)),
+        fbm(pos * 0.75 + vec2(8.3, 2.8))
+    ) - 0.5;
     
-    return getRevealData(tileCenter);
+    vec2 warpedPos = pos + uvNoise * 0.65;
+    
+    // Identify 4 surrounding tile centers
+    vec2 p = warpedPos - vec2(0.5);
+    vec2 i0 = floor(p);
+    vec2 f = p - i0;
+    
+    // Smooth cubic Hermite interpolation between tiles
+    vec2 smoothF = smoothstep(0.0, 1.0, f);
+    
+    // Sample exact half-integer texel centers (never corrupts 24-bit integer bits)
+    vec2 d00 = getRevealData(vec2(i0.x + 0.5, i0.y + 0.5));
+    vec2 d10 = getRevealData(vec2(i0.x + 1.5, i0.y + 0.5));
+    vec2 d01 = getRevealData(vec2(i0.x + 0.5, i0.y + 1.5));
+    vec2 d11 = getRevealData(vec2(i0.x + 1.5, i0.y + 1.5));
+    
+    // Bilinearly blend the decoded masks
+    float maskTop = mix(d00.x, d10.x, smoothF.x);
+    float maskBot = mix(d01.x, d11.x, smoothF.x);
+    float blendedMask = mix(maskTop, maskBot, smoothF.y);
+    
+    // Animation blowout intensity
+    float blowTop = max(d00.y, d10.y);
+    float blowBot = max(d01.y, d11.y);
+    float blendedBlowout = max(blowTop, blowBot);
+    
+    return vec2(blendedMask, blendedBlowout);
 }
 
 // -----------------------------------------------------------
@@ -92,16 +122,15 @@ vec2 getExactRevealState(vec2 worldCoord) {
 // The wisp effect itself lives in composeFinalPixel (alpha modulation)
 // -----------------------------------------------------------
 vec2 applyBlowoutDistortion(vec2 st, float blowout) {
-    if (blowout <= 0.0) return st;
+    if (blowout <= 0.001) return st;
 
-    // Slow, gentle warp — just enough to make the fog texture drift
-    // during the dissolve. NOT the main source of chaos.
+    float timeS = iTime / 1000.0;
     vec2 drift = vec2(
-        fbm(st * 3.0 + iTime * 0.4),
-        fbm(st * 3.0 - iTime * 0.4 + 5.7)
+        fbm(st * 3.0 + timeS * 0.4),
+        fbm(st * 3.0 - timeS * 0.4 + 5.7)
     ) - 0.5;
 
-    return st + drift * 0.08 * blowout;
+    return st + drift * 0.06 * blowout;
 }
 
 // -----------------------------------------------------------
@@ -129,31 +158,30 @@ vec4 calculateBaseFog(vec2 st) {
 }
 
 // -----------------------------------------------------------
-// STEP 5: FINAL COMPOSITING WITH WISPY FEATHERED DISSOLVE
+// STEP 5: FINAL COMPOSITING WITH WISPY FEATHERED DISSOLVE & EDGES
 // -----------------------------------------------------------
 vec4 composeFinalPixel(vec2 st, vec3 baseColor, float density, float mask, float blowout) {
-    // --- Wisp noise: two fbm layers at different scales & speeds ---
-    // Fine layer: small high-frequency wisps
-    float wispFine   = fbm(st * 14.0 + iTime * 0.25);
-    // Coarse layer: larger slow tendrils that linger
-    float wispCoarse = fbm(st *  5.0 - iTime * 0.10 + vec2(3.1, 7.4));
+    float timeS = iTime / 1000.0;
 
-    // Combine: coarse drives the shape, fine adds detail
+    // --- Wisp noise: two fbm layers at different scales & speeds ---
+    float wispFine   = fbm(st * 14.0 + timeS * 0.25);
+    float wispCoarse = fbm(st *  5.0 - timeS * 0.10 + vec2(3.1, 7.4));
     float wispNoise = wispCoarse * 0.65 + wispFine * 0.35;
 
-    // Feather offset: shifts when THIS pixel's fog burns away.
-    // blowout (sin curve, 0→1→0) gates the effect so it only fires
-    // during the dissolve window and is absent at steady state.
-    // Range: ±0.28 of mask — enough to make edges ragged without
-    // revealing fully-fogged areas.
-    float feather = (wispNoise - 0.5) * 0.56 * blowout;
+    // Edge feathering factor: bell curve peaking at reveal boundaries (mask ~ 0.5)
+    float edgeFactor = sin(mask * 3.14159265);
 
-    // Noisy mask: each pixel dissolves at a slightly different time
+    // Active feathering combines blowout (during dissolve) and edgeFactor (at boundary)
+    float activeStrength = max(blowout * 0.55, edgeFactor * 0.50);
+
+    // Modulate threshold by wispy noise
+    float feather = (wispNoise - 0.5) * activeStrength;
+
+    // Noisy mask: each pixel dissolves along wispy tendrils
     float noisyMask = clamp(mask + feather, 0.0, 1.0);
 
     // Smooth fade on the noisy threshold
-    // Narrow band (0.3–0.75) keeps edges crisp while still feathered
-    float fade_alpha = 1.0 - smoothstep(0.3, 0.75, noisyMask);
+    float fade_alpha = 1.0 - smoothstep(0.2, 0.8, noisyMask);
 
     vec3 finalRGB = density * baseColor * 1.3;
     return vec4(finalRGB * fade_alpha, fade_alpha);
@@ -166,7 +194,7 @@ vec4 main(vec2 inp) {
     vec2 st = inp.xy / iResolution.xy;
     vec2 worldCoord = inp + u_canvasOffset;
 
-    vec2 animState = getExactRevealState(worldCoord);
+    vec2 animState = getFeatheredRevealState(worldCoord);
     float mask    = animState.x;
     float blowout = animState.y;
 
@@ -177,8 +205,6 @@ vec4 main(vec2 inp) {
     vec3 fogColor  = fogData.rgb;
     float fogDensity = fogData.a;
 
-    // st (not warpedST) for noise — wisp positions should be stable
-    // in screen space so tendrils don't slide with the fog texture
     return composeFinalPixel(st, fogColor, fogDensity, mask, blowout);
 }
 `);
@@ -190,6 +216,7 @@ export interface FogShaderProps {
   revealTexture: SkImage | null;
   squareSize: Measure;
   fogOpacity?: number;
+  getFogEpochNow?: () => number;
 }
 
 const FogShader = memo(
@@ -198,11 +225,12 @@ const FogShader = memo(
     revealTexture,
     squareSize,
     fogOpacity = 1.0,
+    getFogEpochNow,
   }: FogShaderProps) => {
     const time = useSharedValue(0);
 
     useFrameCallback(() => {
-      time.value = performance.now();
+      time.value = getFogEpochNow?.() ?? 0;
     });
 
     const canvasResize = 1.4;

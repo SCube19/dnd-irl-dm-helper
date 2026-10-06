@@ -59,6 +59,7 @@ function MapScreen({ route }: MapScreenProps) {
     handleReveal,
     handleHide,
     resetFogOfWar,
+    getFogEpochNow,
   } = useFogOfWar(imageSize, 15);
 
   // Load initial data
@@ -130,15 +131,7 @@ function MapScreen({ route }: MapScreenProps) {
 
   const handleSave = async () => {
     if (!mapUri) return;
-    // Extract revealed squares from mapBuffer for persistence
     const revealedPoints: { x: number; y: number }[] = [];
-    for (let y = 0; y < gridHeight; y++) {
-      for (let x = 0; x < gridWidth; x++) {
-        if (mapBuffer[y * gridWidth + x] === 255) {
-          revealedPoints.push({ x, y });
-        }
-      }
-    }
     await MapDataStorage.saveMapData(mapUri, {
       name: mapName,
       revealedSquares: revealedPoints,
@@ -249,6 +242,7 @@ function MapScreen({ route }: MapScreenProps) {
                   }}
                   revealTexture={revealTexture}
                   fogOpacity={viewerRole === "dm" ? 0.35 : 1.0}
+                  getFogEpochNow={getFogEpochNow}
                 />
               )}
             </View>
