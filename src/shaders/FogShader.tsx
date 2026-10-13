@@ -9,11 +9,10 @@ import {
   BlurMask,
   FilterMode,
 } from "@shopify/react-native-skia";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useEffect } from "react";
 import {
   useSharedValue,
   useDerivedValue,
-  useFrameCallback,
   type SharedValue,
 } from "react-native-reanimated";
 import { Measure } from "../types/common";
@@ -229,9 +228,15 @@ const FogShader = memo(
   }: FogShaderProps) => {
     const time = useSharedValue(0);
 
-    useFrameCallback(() => {
-      time.value = getFogEpochNow?.() ?? 0;
-    });
+    useEffect(() => {
+      let rafId: number;
+      const animate = () => {
+        time.value = getFogEpochNow?.() ?? 0;
+        rafId = requestAnimationFrame(animate);
+      };
+      rafId = requestAnimationFrame(animate);
+      return () => cancelAnimationFrame(rafId);
+    }, [getFogEpochNow, time]);
 
     const canvasResize = 1.4;
     const shaderResize = 1.0;
