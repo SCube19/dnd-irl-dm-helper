@@ -7,16 +7,15 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import { MapTransformState } from "../hooks/useMapTransform";
-import { usePanZoomGesture } from "../hooks/usePanZoomGesture";
-import { useEraseGesture } from "../hooks/useEraseGesture";
-import { useRectSelectGesture } from "../hooks/useRectSelectGesture";
+import { usePanZoomGesture } from "../interaction/gestures/usePanZoomGesture";
+import { useEraseGesture } from "../interaction/gestures/useEraseGesture";
+import { useRectSelectGesture } from "../interaction/gestures/useRectSelectGesture";
 import { Point, InteractionMode } from "../types/common";
 
 interface MapInteractionConnectorProps {
   transform: MapTransformState;
   minScale?: number;
   maxScale?: number;
-  onScaleUpdate?: (scale: number) => void;
   onTouch?: (p: Point) => void;
   onDraw?: (p: Point) => void;
   onRectSelect?: (start: Point, end: Point) => void;
@@ -28,7 +27,6 @@ export const MapInteractionConnector = ({
   transform,
   minScale,
   maxScale,
-  onScaleUpdate,
   onTouch,
   onDraw,
   onRectSelect,
@@ -39,7 +37,6 @@ export const MapInteractionConnector = ({
     transform,
     minScale,
     maxScale,
-    onScaleUpdate,
     enabled: mode === InteractionMode.PAN,
   });
 
