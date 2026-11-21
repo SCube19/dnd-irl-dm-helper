@@ -8,6 +8,9 @@ import {
   BoundingBox,
 } from "../utils/platform";
 
+const DEFAULT_CURSOR = "move";
+const MIN_PIXELS_VISIBLE = 100;
+
 export function useMapTransform(
   containerSize: { width: number; height: number },
   contentSize: { width: number; height: number },
@@ -19,14 +22,11 @@ export function useMapTransform(
   const translationY = useSharedValue(
     containerSize.height / 2 - contentSize.height / 2,
   );
-  const prevTranslationX = useSharedValue(0);
-  const prevTranslationY = useSharedValue(0);
-
   const scale = useSharedValue(initialScale);
+  const cursor = useSharedValue(DEFAULT_CURSOR);
   const containerRef = useRef<View>(null);
   const hasCentered = useRef(false);
-
-  // Auto-tracked on-screen bounds for native window coordinate conversion
+  const cursorChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerBounds = useRef<BoundingBox>({
     left: 0,
     top: 0,
@@ -34,40 +34,19 @@ export function useMapTransform(
     height: containerSize.height,
   });
 
-  const updateContainerBounds = useCallback(() => {
+  const onContainerLayout = useCallback(() => {
     measureElement(containerRef.current, (box) => {
-      if (box) {
-        containerBounds.current = box;
-      }
+      if (box) containerBounds.current = box;
     });
   }, []);
 
-  const onContainerLayout = useCallback(() => {
-    updateContainerBounds();
-  }, [updateContainerBounds]);
-
-  const enableTransition = useSharedValue(false);
-  const defaultCursor = "move";
-  const cursor = useSharedValue(defaultCursor);
-  const cursorChangeTimer = useRef<NodeJS.Timeout | null>(null);
-
-  // Re-center ONLY ONCE when sizes change (useful for initial load where contentSize starts at 0,0)
   useEffect(() => {
-    if (
-      contentSize.width > 0 &&
-      contentSize.height > 0 &&
-      !hasCentered.current
-    ) {
+    if (contentSize.width > 0 && contentSize.height > 0 && !hasCentered.current) {
       translationX.value =
         containerSize.width / 2 - (contentSize.width * scale.value) / 2;
       translationY.value =
         containerSize.height / 2 - (contentSize.height * scale.value) / 2;
       hasCentered.current = true;
-
-      // Delay enabling the pan zoom transition to avoid animating from 0,0 origin
-      setTimeout(() => {
-        enableTransition.value = true;
-      }, 50);
     }
   }, [
     containerSize.width,
@@ -77,75 +56,77 @@ export function useMapTransform(
     scale,
     translationX,
     translationY,
-    enableTransition,
   ]);
 
-  function setTranslation(xValue: number, yValue: number) {
-    const minPixelsVisible = 100;
-    const maxTranslateX = containerSize.width - minPixelsVisible;
-    const maxTranslateY = containerSize.height - minPixelsVisible;
-    const minTranslateX = minPixelsVisible - contentSize.width * scale.value;
-    const minTranslateY = minPixelsVisible - contentSize.height * scale.value;
-    translationX.value = clamp(xValue, minTranslateX, maxTranslateX);
-    translationY.value = clamp(yValue, minTranslateY, maxTranslateY);
-  }
-
-  function setCursor(newCursor: string = defaultCursor, resetTimeout?: number) {
-    if (cursorChangeTimer.current) {
-      clearTimeout(cursorChangeTimer.current);
-    }
-    if (resetTimeout !== undefined) {
-      cursorChangeTimer.current = setTimeout(
-        () => (cursor.value = defaultCursor),
-        resetTimeout,
+  const setTranslation = useCallback(
+    (x: number, y: number) => {
+      translationX.value = clamp(
+        x,
+        MIN_PIXELS_VISIBLE - contentSize.width * scale.value,
+        containerSize.width - MIN_PIXELS_VISIBLE,
       );
-    }
-    cursor.value = newCursor;
-  }
+      translationY.value = clamp(
+        y,
+        MIN_PIXELS_VISIBLE - contentSize.height * scale.value,
+        containerSize.height - MIN_PIXELS_VISIBLE,
+      );
+    },
+    [
+      containerSize.width,
+      containerSize.height,
+      contentSize.width,
+      contentSize.height,
+      scale,
+      translationX,
+      translationY,
+    ],
+  );
 
-  /**
-   * Converts absolute screen coordinates (such as browser WheelEvent clientX/Y)
-   * into coordinates relative to this container view.
-   */
-  const getContainerPoint = (screenPoint: Point): Point => {
-    return screenToContainer(screenPoint, containerRef.current, containerBounds.current);
-  };
+  const setCursor = useCallback(
+    (newCursor: string = DEFAULT_CURSOR, resetTimeout?: number) => {
+      if (cursorChangeTimer.current) clearTimeout(cursorChangeTimer.current);
+      if (resetTimeout !== undefined) {
+        cursorChangeTimer.current = setTimeout(
+          () => (cursor.value = DEFAULT_CURSOR),
+          resetTimeout,
+        );
+      }
+      cursor.value = newCursor;
+    },
+    [cursor],
+  );
 
-  /**
-   * Converts container-relative coordinates into content coordinates (accounting for pan & zoom).
-   * Note: Touch coordinates from gesture events (event.x, event.y) are ALREADY container-relative.
-   */
-  const getContentPoint = (containerPoint: Point): Point => {
-    const contentX = (containerPoint.x - translationX.value) / scale.value;
-    const contentY = (containerPoint.y - translationY.value) / scale.value;
-    return new Point(contentX, contentY);
-  };
+  const getContainerPoint = useCallback(
+    (screenPoint: Point): Point =>
+      screenToContainer(
+        screenPoint,
+        containerRef.current,
+        containerBounds.current,
+      ),
+    [],
+  );
 
-  /**
-   * Convenience helper to convert absolute screen coordinates all the way to content coordinates.
-   */
-  const screenToContentPoint = (screenPoint: Point): Point => {
-    const containerPoint = getContainerPoint(screenPoint);
-    return getContentPoint(containerPoint);
-  };
+  const getContentPoint = useCallback(
+    (containerPoint: Point): Point =>
+      new Point(
+        (containerPoint.x - translationX.value) / scale.value,
+        (containerPoint.y - translationY.value) / scale.value,
+      ),
+    [scale, translationX, translationY],
+  );
 
   return {
     translationX,
     translationY,
-    prevTranslationX,
-    prevTranslationY,
     scale,
     containerRef,
-    enableTransition,
     cursor,
     setTranslation,
     setCursor,
     onContainerLayout,
     getContainerPoint,
     getContentPoint,
-    screenToContentPoint,
     containerSize,
-    contentSize,
   };
 }
 
