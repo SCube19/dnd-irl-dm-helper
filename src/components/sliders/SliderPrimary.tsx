@@ -25,7 +25,7 @@ const SliderPrimary = ({
   minimumValue = 0,
   maximumValue = 1,
   step = 0.1,
-  className,
+  className = "",
 }: SliderPrimaryProps) => {
   const [width, setWidth] = useState(0);
   const progress = useSharedValue(0);
@@ -41,9 +41,7 @@ const SliderPrimary = ({
   }, [value, minimumValue, maximumValue]);
 
   const onUpdateJS = useCallback(
-    (newVal: number) => {
-      onValueChange?.(newVal);
-    },
+    (newVal: number) => onValueChange?.(newVal),
     [onValueChange],
   );
 
@@ -51,7 +49,10 @@ const SliderPrimary = ({
     "worklet";
     if (width <= 0) return;
 
-    const rawProgress = Math.max(0, Math.min(1, (x - 16) / Math.max(1, width - 16)));
+    const rawProgress = Math.max(
+      0,
+      Math.min(1, (x - 16) / Math.max(1, width - 16)),
+    );
     const range = maximumValue - minimumValue;
     let newValue = minimumValue + rawProgress * range;
 
@@ -61,7 +62,6 @@ const SliderPrimary = ({
     }
     newValue = Math.max(minimumValue, Math.min(maximumValue, newValue));
 
-    // VISUAL SNAPPING: Set progress to the snapped value
     progress.value = (newValue - minimumValue) / range;
 
     if (newValue !== lastEmittedValue.value) {
@@ -75,33 +75,12 @@ const SliderPrimary = ({
       isPressed.value = true;
       handleUpdate(e.x);
     })
-    .onUpdate((e) => {
-      handleUpdate(e.x);
-    })
-    .onEnd(() => {
-      const range = maximumValue - minimumValue;
-      const rawValue = minimumValue + progress.value * range;
-      const steppedValue =
-        minimumValue + Math.round((rawValue - minimumValue) / step) * step;
-      const clampedValue = Math.max(
-        minimumValue,
-        Math.min(maximumValue, steppedValue),
-      );
-      const snappedProgress = (clampedValue - minimumValue) / range;
-
-      progress.value = withTiming(snappedProgress, { duration: 100 });
-      if (clampedValue !== lastEmittedValue.value) {
-        lastEmittedValue.value = clampedValue;
-        runOnJS(onUpdateJS)(clampedValue);
-      }
-    })
+    .onUpdate((e) => handleUpdate(e.x))
     .onFinalize(() => {
       isPressed.value = false;
     });
 
-  const tap = Gesture.Tap().onBegin((e) => {
-    handleUpdate(e.x);
-  });
+  const tap = Gesture.Tap().onBegin((e) => handleUpdate(e.x));
 
   const gesture = Gesture.Exclusive(pan, tap);
 

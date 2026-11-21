@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Pressable, Text, Modal, Image, Platform, TextInput } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import ButtonPrimary from "./buttons/ButtonPrimary";
@@ -18,6 +18,14 @@ const UploadPopup: React.FC<ImageUploadPopupProps> = ({
   const [image, setImage] = useState<string | null>(null);
   const [name, setName] = useState<string>("");
   const [formError, setFormError] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isVisible) {
+      setFormError(false);
+      setImage(null);
+      setName("");
+    }
+  }, [isVisible]);
 
   const handleOpenPicker = async () => {
     if (Platform.OS !== "web") {
@@ -41,22 +49,13 @@ const UploadPopup: React.FC<ImageUploadPopupProps> = ({
   };
 
   const handleUploadClick = () => {
-    if (!image || !name.trim()) {
+    const trimmed = name.trim();
+    if (!image || !trimmed) {
       setFormError(true);
       return;
     }
     setFormError(false);
-    onUpload(image, name);
-  };
-
-  const handleCancel = () => {
-    onClose();
-  };
-
-  const handleShow = () => {
-    setFormError(false);
-    setImage(null);
-    setName("");
+    onUpload(image, trimmed);
   };
 
   return (
@@ -64,8 +63,7 @@ const UploadPopup: React.FC<ImageUploadPopupProps> = ({
       animationType="fade"
       visible={isVisible}
       transparent={true}
-      onRequestClose={handleCancel}
-      onShow={handleShow}
+      onRequestClose={onClose}
     >
       <View className="flex items-center justify-center h-full w-full bg-black/60 backdrop-blur-sm">
         <View className="bg-base-100 p-8 rounded-3xl shadow-2xl w-11/12 md:w-3/4 lg:w-1/3 max-h-[90vh] flex flex-col border border-base-300">
@@ -117,7 +115,7 @@ const UploadPopup: React.FC<ImageUploadPopupProps> = ({
           </Pressable>
 
           <View className="flex flex-row justify-between gap-4">
-            <ButtonSecondary className="flex-grow py-4" onPress={handleCancel}>
+            <ButtonSecondary className="flex-grow py-4" onPress={onClose}>
               Cancel
             </ButtonSecondary>
             <ButtonPrimary

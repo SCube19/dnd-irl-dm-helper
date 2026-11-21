@@ -15,7 +15,7 @@ import { useMapTransform } from "../hooks/useMapTransform";
 import { useFogOfWar } from "../hooks/useFogOfWar";
 import * as MapDataStorage from "../utils/MapDataStorage";
 import { InteractionMode, Point, Measure } from "../types/common";
-import { ViewerRole } from "../types/entity";
+import { ViewerRole } from "../types/common";
 
 interface MapScreenProps {
   route: any;

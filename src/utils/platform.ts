@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-import { useRef, useCallback } from "react";
 import { Point } from "../types/common";
 
 export interface BoundingBox {
@@ -9,12 +8,6 @@ export interface BoundingBox {
   height: number;
 }
 
-/**
- * Measures the true on-screen bounding rectangle of a component across Web and Native.
- * - On Web: synchronously queries getBoundingClientRect().
- * - On Native: asynchronously queries measureInWindow() to get exact window-relative coordinates.
- * The caller does NOT need to pass manual measurements or guess offsets.
- */
 export function measureElement(
   element: any,
   callback: (bounds: BoundingBox | null) => void,
@@ -24,7 +17,6 @@ export function measureElement(
     return;
   }
 
-  // Web: Direct DOM query
   if (Platform.OS === "web") {
     const domNode = element?.node || element;
     if (typeof domNode?.getBoundingClientRect === "function") {
@@ -39,7 +31,6 @@ export function measureElement(
     }
   }
 
-  // Native: React Native measureInWindow (includes status bar, navigation bar & safe area offsets)
   if (typeof element?.measureInWindow === "function") {
     element.measureInWindow(
       (x: number, y: number, width: number, height: number) => {
@@ -49,7 +40,6 @@ export function measureElement(
     return;
   }
 
-  // Native fallback: measure()
   if (typeof element?.measure === "function") {
     element.measure(
       (
@@ -69,38 +59,6 @@ export function measureElement(
   callback(null);
 }
 
-/**
- * Hook to automatically track the exact on-screen bounds of a view across both Web and Native
- * using onLayout and native measurement, requiring no manual measurements from the caller.
- */
-export function useAutoMeasuredBounds(elementRef: React.RefObject<any>) {
-  const boundsRef = useRef<BoundingBox>({
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 0,
-  });
-
-  const updateBounds = useCallback(() => {
-    measureElement(elementRef.current, (box) => {
-      if (box) {
-        boundsRef.current = box;
-      }
-    });
-  }, [elementRef]);
-
-  const onLayout = useCallback(() => {
-    updateBounds();
-  }, [updateBounds]);
-
-  return { boundsRef, onLayout, updateBounds };
-}
-
-/**
- * Converts an absolute screen point to container-relative coordinates.
- * On Web: uses the current DOM rect.
- * On Native: uses the automatically measured bounds.
- */
 export function screenToContainer(
   screenPoint: Point,
   element: any,
