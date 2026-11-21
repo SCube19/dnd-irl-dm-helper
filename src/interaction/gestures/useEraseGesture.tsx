@@ -1,6 +1,6 @@
 import { Gesture } from "react-native-gesture-handler";
-import { MapTransformState } from "./useMapTransform";
-import { Point } from "../types/common";
+import { MapTransformState } from "../../hooks/useMapTransform";
+import { Point } from "../../types/common";
 
 interface EraseGestureProps {
   transform: MapTransformState;
@@ -20,20 +20,14 @@ export function useEraseGesture({
   const dragGesture = Gesture.Pan()
     .enabled(enabled)
     .minDistance(1)
-    .onStart((event) => {
-      onDraw?.(getContentPoint({ x: event.x, y: event.y }));
-    })
-    .onUpdate((event) => {
-      onDraw?.(getContentPoint({ x: event.x, y: event.y }));
-    })
+    .onStart((e) => onDraw?.(getContentPoint({ x: e.x, y: e.y })))
+    .onUpdate((e) => onDraw?.(getContentPoint({ x: e.x, y: e.y })))
     .runOnJS(true);
 
   const tapGesture = Gesture.Tap()
     .enabled(enabled)
     .maxDuration(250)
-    .onStart((event) => {
-      onTouch?.(getContentPoint({ x: event.x, y: event.y }));
-    })
+    .onStart((e) => onTouch?.(getContentPoint({ x: e.x, y: e.y })))
     .runOnJS(true);
 
   return Gesture.Race(dragGesture, tapGesture);
