@@ -2,7 +2,11 @@ import React, { useState } from "react";
 import { View } from "react-native";
 import { MapControlsOverlay } from "../../components/MapControlsOverlay";
 import { TokenBrushPanel } from "../../components/TokenBrushPanel";
-import { useLayerStore } from "../orchestrator";
+import {
+  useLayerStore,
+  useSerializeLayers,
+  type SerializedLayers,
+} from "../orchestrator";
 import { FogLayerKey, type FogLayerState } from "./FogLayer";
 import { TokenLayerKey, type TokenLayerState } from "./token";
 import { InteractionMode } from "../../types/common";
@@ -15,7 +19,7 @@ interface UILayerProps {
   onMapNameChange: (name: string) => void;
   gridSpacing: number;
   onGridSpacingChange: (spacing: number) => void;
-  onSave: () => void | Promise<void>;
+  onSave: (layersData: SerializedLayers) => void | Promise<void>;
   interactionMode: InteractionMode;
   onInteractionModeChange: (mode: InteractionMode) => void;
 }
@@ -33,6 +37,7 @@ export function UILayer({
   const [isEditingName, setIsEditingName] = useState(false);
   const [fog, setFog] = useLayerStore(FogLayerKey);
   const [tokens, setTokens] = useLayerStore(TokenLayerKey);
+  const serializeLayers = useSerializeLayers();
 
   const updateFog = (patch: Partial<FogLayerState>) =>
     setFog((prev) => ({ ...prev, ...patch }));
@@ -41,7 +46,7 @@ export function UILayer({
 
   const handleSave = async () => {
     setIsEditingName(false);
-    await onSave();
+    await onSave(serializeLayers());
   };
 
   return (

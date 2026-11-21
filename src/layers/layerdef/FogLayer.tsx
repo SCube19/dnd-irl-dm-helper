@@ -5,6 +5,7 @@ import { useGrid } from "../../hooks/useGrid";
 import {
   defineLayerKey,
   useLayerInteraction,
+  useLayerPersistence,
   useLayerStore,
   type PointerPayload,
 } from "../orchestrator";
@@ -18,6 +19,10 @@ export interface FogLayerState {
   eraseSize: number;
 }
 
+interface SerializedFog extends Partial<FogLayerState> {
+  texture?: string | null;
+}
+
 export const FogLayerKey = defineLayerKey<FogLayerState>("fog", {
   visible: true,
   viewerRole: "dm",
@@ -29,9 +34,24 @@ const HIDE_MODES = new Set([InteractionMode.COVER, InteractionMode.COVER_RECT]);
 
 export function FogLayer() {
   const { imageSize, gridSpacing, pixelToGrid } = useGrid();
-  const [{ visible, viewerRole, eraseSize }] = useLayerStore(FogLayerKey);
-  const { revealTexture, handleReveal, handleHide, getFogEpochNow } =
-    useFogOfWar(imageSize, gridSpacing);
+  const [{ visible, viewerRole, eraseSize }, setFogState] =
+    useLayerStore(FogLayerKey);
+  const {
+    revealTexture,
+    handleReveal,
+    handleHide,
+    serializeTexture,
+    deserializeTexture,
+    getFogEpochNow,
+  } = useFogOfWar(imageSize, gridSpacing);
+
+  useLayerPersistence<FogLayerState, SerializedFog>(FogLayerKey, {
+    serialize: (state) => ({ ...state, texture: serializeTexture() }),
+    deserialize: ({ texture, ...saved }) => {
+      if (texture) deserializeTexture(texture);
+      setFogState((prev) => ({ ...prev, ...saved }));
+    },
+  });
 
   const paintFor = (mode: InteractionMode) => {
     if (!visible) return null;

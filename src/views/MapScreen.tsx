@@ -19,6 +19,7 @@ import {
   UILayer,
   MapSpaceLayerView,
   LAYER_Z,
+  type SerializedLayers,
 } from "../layers";
 
 const maxScale = 5;
@@ -56,6 +57,9 @@ function MapScreen({ route }: MapScreenProps) {
   const [currentDisplayUri, setCurrentDisplayUri] = useState<any>(mapUri);
   const [mapName, setMapName] = useState<string>("");
   const [gridSpacing, setGridSpacing] = useState<number>(15);
+  const [initialLayersData, setInitialLayersData] = useState<
+    SerializedLayers | undefined
+  >(undefined);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>(
     InteractionMode.PAN,
   );
@@ -84,21 +88,26 @@ function MapScreen({ route }: MapScreenProps) {
       setGridSpacing(session.gridSpacing || 15);
       setMapName(session.name || "Unnamed Map");
       setCurrentDisplayUri(displayUri);
+      setInitialLayersData(session.layers || {});
       setIsLoading(false);
     };
 
     loadInit();
   }, [mapUri]);
 
-  const handleSave = useCallback(async () => {
-    if (!mapUri) return;
-    await MapDataStorage.saveMapData(mapUri, {
-      name: mapName,
-      gridSpacing,
-      imageUri: currentDisplayUri,
-    });
-    alert("Map state saved!");
-  }, [mapUri, mapName, gridSpacing, currentDisplayUri]);
+  const handleSave = useCallback(
+    async (layersData: SerializedLayers) => {
+      if (!mapUri) return;
+      await MapDataStorage.saveMapData(mapUri, {
+        name: mapName,
+        gridSpacing,
+        imageUri: currentDisplayUri,
+        layers: layersData,
+      });
+      alert("Map state saved!");
+    },
+    [mapUri, mapName, gridSpacing, currentDisplayUri],
+  );
 
   if (isLoading || imageSize.width === 0) {
     return (
@@ -114,7 +123,7 @@ function MapScreen({ route }: MapScreenProps) {
         style={{ width: containerSize.width, height: containerSize.height }}
         className="bg-base-300"
       >
-        <LayerOrchestrator>
+        <LayerOrchestrator initialLayersData={initialLayersData}>
           <OrchestratedInteractionConnector
             transform={mapTransform}
             imageSize={imageSize}
