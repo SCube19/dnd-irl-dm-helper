@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   SafeAreaView,
@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import "../styles/global.css";
 import { useMapTransform } from "../hooks/useMapTransform";
+import { useLatest } from "../hooks/useLatest";
 import * as MapDataStorage from "../utils/MapDataStorage";
 import { InteractionMode } from "../types/common";
 import {
@@ -19,6 +20,7 @@ import {
   UILayer,
   MapSpaceLayerView,
   LAYER_Z,
+  createRecordLayerStorage,
   type SerializedLayers,
 } from "../layers";
 
@@ -70,6 +72,7 @@ function MapScreen({ route }: MapScreenProps) {
     [windowWidth, windowHeight],
   );
   const mapTransform = useMapTransform(containerSize, imageSize, initialScale);
+  const metaRef = useLatest({ mapUri, mapName, gridSpacing, currentDisplayUri });
 
   useEffect(() => {
     const loadInit = async () => {
@@ -95,18 +98,20 @@ function MapScreen({ route }: MapScreenProps) {
     loadInit();
   }, [mapUri]);
 
-  const handleSave = useCallback(
-    async (layersData: SerializedLayers) => {
-      if (!mapUri) return;
-      await MapDataStorage.saveMapData(mapUri, {
-        name: mapName,
-        gridSpacing,
-        imageUri: currentDisplayUri,
-        layers: layersData,
-      });
-      alert("Map state saved!");
-    },
-    [mapUri, mapName, gridSpacing, currentDisplayUri],
+  const layerStorage = useMemo(
+    () =>
+      createRecordLayerStorage(initialLayersData, async (layers) => {
+        const meta = metaRef.current;
+        if (!meta.mapUri) return;
+        await MapDataStorage.saveMapData(meta.mapUri, {
+          name: meta.mapName,
+          gridSpacing: meta.gridSpacing,
+          imageUri: meta.currentDisplayUri,
+          layers,
+        });
+        alert("Map state saved!");
+      }),
+    [initialLayersData, metaRef],
   );
 
   if (isLoading || imageSize.width === 0) {
@@ -123,7 +128,7 @@ function MapScreen({ route }: MapScreenProps) {
         style={{ width: containerSize.width, height: containerSize.height }}
         className="bg-base-300"
       >
-        <LayerOrchestrator initialLayersData={initialLayersData}>
+        <LayerOrchestrator key={String(mapUri)} storage={layerStorage}>
           <OrchestratedInteractionConnector
             transform={mapTransform}
             imageSize={imageSize}
@@ -157,7 +162,6 @@ function MapScreen({ route }: MapScreenProps) {
               onMapNameChange={setMapName}
               gridSpacing={gridSpacing}
               onGridSpacingChange={setGridSpacing}
-              onSave={handleSave}
               interactionMode={interactionMode}
               onInteractionModeChange={setInteractionMode}
             />
