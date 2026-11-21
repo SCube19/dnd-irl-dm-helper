@@ -23,6 +23,8 @@ export interface MapControlsOverlayProps {
   setFogOfWarVisible: (visible: boolean) => void;
   viewerRole: ViewerRole;
   setViewerRole: (role: ViewerRole) => void;
+  /** Shown while placing tokens. */
+  tokenPanel: React.ReactNode;
 }
 
 const MODE_BUTTONS: [InteractionMode, string][] = [
@@ -31,10 +33,16 @@ const MODE_BUTTONS: [InteractionMode, string][] = [
   [InteractionMode.RECT, "Rect"],
   [InteractionMode.COVER, "Cover"],
   [InteractionMode.COVER_RECT, "Cover Rect"],
+  [InteractionMode.TOKEN_ADD, "+ Token"],
+  [InteractionMode.TOKEN_MOVE, "Move Token"],
+  [InteractionMode.TOKEN_REMOVE, "Remove Token"],
   [InteractionMode.GRID, "Grid"],
 ];
 
 const MODE_HINTS: Partial<Record<InteractionMode, string>> = {
+  [InteractionMode.PAN]: "Drag to pan • Hover or tap a token to view its image",
+  [InteractionMode.TOKEN_MOVE]: "Hold and drag a token to move • Tap token to view image",
+  [InteractionMode.TOKEN_REMOVE]: "Tap a token or cell to remove it",
   [InteractionMode.COVER_RECT]: "Drag a rectangle to cover with fog",
   [InteractionMode.RECT]: "Drag a rectangle to reveal fog",
 };
@@ -55,6 +63,7 @@ export const MapControlsOverlay = ({
   setFogOfWarVisible,
   viewerRole,
   setViewerRole,
+  tokenPanel,
 }: MapControlsOverlayProps) => {
   const hint = MODE_HINTS[interactionMode];
   const isBrushMode =
@@ -157,6 +166,8 @@ export const MapControlsOverlay = ({
               />
             </View>
           )}
+
+          {interactionMode === InteractionMode.TOKEN_ADD && tokenPanel}
 
           {hint && (
             <View className="w-full px-2 py-1 mt-1 bg-base-200/50 rounded-xl border border-base-300 flex-row items-center justify-between">
