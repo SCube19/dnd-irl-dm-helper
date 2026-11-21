@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   SafeAreaView,
@@ -6,163 +6,98 @@ import {
   useWindowDimensions,
   Text,
 } from "react-native";
-import { MapInteractionConnector } from "../components/MapInteractionConnector";
-import { MapControlsOverlay } from "../components/MapControlsOverlay";
 import "../styles/global.css";
-import FogShader from "../shaders/FogShader";
 import { useMapTransform } from "../hooks/useMapTransform";
-import { useFogOfWar } from "../hooks/useFogOfWar";
 import * as MapDataStorage from "../utils/MapDataStorage";
-import { InteractionMode, Point, Measure } from "../types/common";
-import { ViewerRole } from "../types/common";
-import { GridLayer } from "../layers";
-import { MapSpaceProvider } from "../layers/MapSpaceProvider";
+import { InteractionMode } from "../types/common";
+import {
+  LayerOrchestrator,
+  OrchestratedInteractionConnector,
+  FogLayer,
+  GridLayer,
+  UILayer,
+  MapSpaceLayerView,
+  LAYER_Z,
+} from "../layers";
+
+const maxScale = 5;
+const minScale = 0.25;
+const initialScale = 1;
+const maxResolution = 1024;
 
 interface MapScreenProps {
   route: any;
 }
 
-const maxScale: number = 5;
-const minScale: number = 0.25;
-const initialScale: number = 1;
-const maxResolution = 1024;
+/** Size of a stored image URI or a bundled asset (e.g. the placeholder map). */
+function getImageDimensions(
+  uri: string | number,
+): Promise<{ width: number; height: number }> {
+  const fallback = { width: maxResolution, height: maxResolution };
+  if (typeof uri === "number") {
+    const { width, height } = Image.resolveAssetSource(uri) ?? {};
+    return Promise.resolve(width && height ? { width, height } : fallback);
+  }
+  return new Promise((resolve) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      () => resolve(fallback),
+    );
+  });
+}
 
 function MapScreen({ route }: MapScreenProps) {
   const { map: mapUri } = route.params || {};
 
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentDisplayUri, setCurrentDisplayUri] = useState<any>(mapUri);
+  const [mapName, setMapName] = useState<string>("");
+  const [gridSpacing, setGridSpacing] = useState<number>(15);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>(
     InteractionMode.PAN,
   );
-  const [eraseSize, setEraseSize] = useState<number>(1);
-
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isMapReady, setIsMapReady] = useState(false);
-
-  const [mapName, setMapName] = useState<string>("");
-  const [isEditingName, setIsEditingName] = useState(false);
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const containerSize = { width: windowWidth, height: windowHeight };
+  const containerSize = useMemo(
+    () => ({ width: windowWidth, height: windowHeight }),
+    [windowWidth, windowHeight],
+  );
+  const mapTransform = useMapTransform(containerSize, imageSize, initialScale);
 
-  const [fogOfWarVisible, setFogOfWarVisible] = useState<boolean>(true);
-  const [viewerRole, setViewerRole] = useState<ViewerRole>("dm");
-
-  const {
-    gridSpacing,
-    setGridSpacing,
-    gridWidth,
-    gridHeight,
-    revealTexture,
-    handleReveal,
-    handleHide,
-    resetFogOfWar,
-    getFogEpochNow,
-  } = useFogOfWar(imageSize, 15);
-
-  // Load initial data
   useEffect(() => {
     const loadInit = async () => {
       if (!mapUri) return;
 
       const session = await MapDataStorage.getMapData(mapUri);
       const displayUri = session.imageUri || mapUri;
+      const originalSize = await getImageDimensions(displayUri);
+      const maxDim = Math.max(originalSize.width, originalSize.height);
+      const downScale = maxDim > maxResolution ? maxDim / maxResolution : 1;
 
-      const getDimensions = (): Promise<{ width: number; height: number }> => {
-        if (typeof displayUri === "number") {
-          const resolved = Image.resolveAssetSource(displayUri);
-          return Promise.resolve({
-            width: resolved.width,
-            height: resolved.height,
-          });
-        }
-        return new Promise((resolve) => {
-          Image.getSize(displayUri, (width, height) =>
-            resolve({ width, height }),
-          );
-        });
-      };
-
-      const originalSize = await getDimensions();
-      const downScaleFactor =
-        Math.max(originalSize.width, originalSize.height) > maxResolution
-          ? Math.max(originalSize.width, originalSize.height) / maxResolution
-          : 1;
-
-      const calculatedSize = {
-        width: originalSize.width / downScaleFactor,
-        height: originalSize.height / downScaleFactor,
-      };
-
-      setImageSize(calculatedSize);
+      setImageSize({
+        width: originalSize.width / downScale,
+        height: originalSize.height / downScale,
+      });
       setGridSpacing(session.gridSpacing || 15);
       setMapName(session.name || "Unnamed Map");
-      if (session.revealedSquares && session.revealedSquares.length > 0) {
-        const points = session.revealedSquares;
-        for (const p of points) {
-          handleReveal(new Point(p.x, p.y), { width: 1, height: 1 });
-        }
-      }
+      setCurrentDisplayUri(displayUri);
       setIsLoading(false);
     };
 
     loadInit();
-  }, [mapUri, setGridSpacing, handleReveal]);
-
-  const mapTransform = useMapTransform(
-    containerSize,
-    { width: imageSize.width, height: imageSize.height },
-    initialScale,
-  );
-
-  const [currentDisplayUri, setCurrentDisplayUri] = useState<any>(mapUri);
-
-  useEffect(() => {
-    const fetchUri = async () => {
-      if (mapUri) {
-        const session = await MapDataStorage.getMapData(mapUri);
-        setCurrentDisplayUri(session.imageUri || mapUri);
-      }
-    };
-    fetchUri();
   }, [mapUri]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!mapUri) return;
-    const revealedPoints: { x: number; y: number }[] = [];
     await MapDataStorage.saveMapData(mapUri, {
       name: mapName,
-      revealedSquares: revealedPoints,
-      gridSpacing: gridSpacing,
+      gridSpacing,
       imageUri: currentDisplayUri,
     });
-    setIsEditingName(false);
     alert("Map state saved!");
-  };
-
-  const onDrawProxy = (p: { x: number; y: number }) => {
-    const centerGridX = Math.floor(p.x / gridSpacing);
-    const centerGridY = Math.floor(p.y / gridSpacing);
-    const half = Math.floor(eraseSize / 2);
-    handleReveal(new Point(centerGridX - half, centerGridY - half), {
-      width: eraseSize,
-      height: eraseSize,
-    });
-  };
-
-  const onTouchProxy = (p: { x: number; y: number }) => {
-    const centerGridX = Math.floor(p.x / gridSpacing);
-    const centerGridY = Math.floor(p.y / gridSpacing);
-    const half = Math.floor(eraseSize / 2);
-    // Toggle: if center cell is revealed, hide; otherwise reveal
-    const centerIndex = centerGridY * gridWidth + centerGridX;
-    const isRevealed = false;
-    const handler = isRevealed ? handleHide : handleReveal;
-    handler(new Point(centerGridX - half, centerGridY - half), {
-      width: eraseSize,
-      height: eraseSize,
-    });
-  };
+  }, [mapUri, mapName, gridSpacing, currentDisplayUri]);
 
   if (isLoading || imageSize.width === 0) {
     return (
@@ -175,105 +110,48 @@ function MapScreen({ route }: MapScreenProps) {
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
       <View
-        style={{
-          width: containerSize.width,
-          height: containerSize.height,
-        }}
+        style={{ width: containerSize.width, height: containerSize.height }}
         className="bg-base-300"
       >
-        <MapInteractionConnector
-          transform={mapTransform}
-          maxScale={maxScale}
-          minScale={minScale}
-          onTouch={onTouchProxy}
-          onDraw={onDrawProxy}
-          onRectSelect={(start: any, end: any) => {
-            const minX = Math.floor(Math.min(start.x, end.x) / gridSpacing);
-            const minY = Math.floor(Math.min(start.y, end.y) / gridSpacing);
-            const maxX = Math.floor(Math.max(start.x, end.x) / gridSpacing);
-            const maxY = Math.floor(Math.max(start.y, end.y) / gridSpacing);
-            handleReveal(new Point(minX, minY), {
-              width: maxX - minX + 1,
-              height: maxY - minY + 1,
-            });
-          }}
-          mode={
-            interactionMode === InteractionMode.GRID
-              ? InteractionMode.PAN
-              : interactionMode
-          }
-        >
-          <View
-            style={{
-              width: imageSize.width,
-              height: imageSize.height,
-              position: "relative",
-              opacity: isMapReady ? 1 : 0,
-            }}
-            className="transition-opacity duration-300"
+        <LayerOrchestrator>
+          <OrchestratedInteractionConnector
+            transform={mapTransform}
+            imageSize={imageSize}
+            gridSpacing={gridSpacing}
+            maxScale={maxScale}
+            minScale={minScale}
+            mode={
+              interactionMode === InteractionMode.GRID
+                ? InteractionMode.PAN
+                : interactionMode
+            }
           >
-            <MapSpaceProvider
-              imageSize={imageSize}
-              gridSpacing={gridSpacing}
-              scale={mapTransform.scale}
-              translationX={mapTransform.translationX}
-              translationY={mapTransform.translationY}
-              containerSize={containerSize}
-            >
+            <MapSpaceLayerView zIndex={LAYER_Z.MAP}>
               <Image
                 source={
                   typeof currentDisplayUri === "string"
                     ? { uri: currentDisplayUri }
                     : currentDisplayUri
                 }
-                style={{
-                  width: imageSize.width,
-                  height: imageSize.height,
-                }}
-                onLoad={() => {
-                  setTimeout(() => setIsMapReady(true), 50);
-                }}
+                style={{ width: imageSize.width, height: imageSize.height }}
               />
-              <View className="w-full h-full absolute z-20 left-0 top-0">
-                {fogOfWarVisible && (
-                  <FogShader
-                    shaderSize={{
-                      width: imageSize.width,
-                      height: imageSize.height,
-                    }}
-                    squareSize={{
-                      width: gridSpacing,
-                      height: gridSpacing,
-                    }}
-                    revealTexture={revealTexture}
-                    fogOpacity={viewerRole === "dm" ? 0.35 : 1.0}
-                    getFogEpochNow={getFogEpochNow}
-                  />
-                )}
-              </View>
-              <GridLayer />
-            </MapSpaceProvider>
-          </View>
-        </MapInteractionConnector>
+            </MapSpaceLayerView>
+            <GridLayer />
+            <FogLayer />
+          </OrchestratedInteractionConnector>
 
-        <MapControlsOverlay
-          handleSave={handleSave}
-          isEditingName={isEditingName}
-          setIsEditingName={setIsEditingName}
-          mapName={mapName}
-          setMapName={setMapName}
-          interactionMode={interactionMode}
-          setInteractionMode={setInteractionMode}
-          eraseSize={eraseSize}
-          setEraseSize={setEraseSize}
-          gridSpacing={gridSpacing}
-          setGridSpacing={setGridSpacing}
-          clearFogOfWar={resetFogOfWar}
-          fogOfWarVisible={fogOfWarVisible}
-          setFogOfWarVisible={setFogOfWarVisible}
-          viewerRole={viewerRole}
-          setViewerRole={setViewerRole}
-        />
+          <LayerOrchestrator.Layer order={10} passThrough>
+            <UILayer
+              mapName={mapName}
+              onMapNameChange={setMapName}
+              gridSpacing={gridSpacing}
+              onGridSpacingChange={setGridSpacing}
+              onSave={handleSave}
+              interactionMode={interactionMode}
+              onInteractionModeChange={setInteractionMode}
+            />
+          </LayerOrchestrator.Layer>
+        </LayerOrchestrator>
       </View>
     </SafeAreaView>
   );
