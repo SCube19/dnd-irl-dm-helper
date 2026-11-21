@@ -4,4 +4,5 @@ export { MapSpaceLayerView, useMapSpace } from "./MapSpaceProvider";
 export { OrchestratedInteractionConnector } from "../interaction/OrchestratedInteractionConnector";
 export { FogLayer, FogLayerKey } from "./layerdef/FogLayer";
 export { GridLayer } from "./layerdef/GridLayer";
+export { TokenLayer, TokenLayerKey } from "./layerdef/token";
 export { UILayer } from "./layerdef/UILayer";

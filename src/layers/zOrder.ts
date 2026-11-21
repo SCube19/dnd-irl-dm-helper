@@ -2,5 +2,7 @@
 export const LAYER_Z = {
   MAP: 0,
   GRID: 10,
+  TOKENS: 15,
   FOG: 20,
+  TOKEN_OVERLAY: 25,
 } as const;

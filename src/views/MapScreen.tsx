@@ -15,6 +15,7 @@ import {
   OrchestratedInteractionConnector,
   FogLayer,
   GridLayer,
+  TokenLayer,
   UILayer,
   MapSpaceLayerView,
   LAYER_Z,
@@ -137,6 +138,7 @@ function MapScreen({ route }: MapScreenProps) {
               />
             </MapSpaceLayerView>
             <GridLayer />
+            <TokenLayer />
             <FogLayer />
           </OrchestratedInteractionConnector>
 
