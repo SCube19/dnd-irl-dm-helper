@@ -3,17 +3,27 @@ import { View, StyleSheet } from "react-native";
 import { LayerServicesContext } from "./OrchestratorContext";
 import { createLayerStore } from "./store";
 import { createLayerEventBus } from "./interaction";
+import {
+  createLayerPersistence,
+  type SerializedLayers,
+} from "./persistence";
 
 interface LayerOrchestratorProps {
+  /** Saved layer data; read once, when the orchestrator mounts. */
+  initialLayersData?: SerializedLayers;
   children: React.ReactNode;
 }
 
-function LayerOrchestratorRoot({ children }: LayerOrchestratorProps) {
+function LayerOrchestratorRoot({
+  initialLayersData,
+  children,
+}: LayerOrchestratorProps) {
   const [services] = useState(() => {
     const store = createLayerStore();
     return {
       store,
       events: createLayerEventBus(),
+      persistence: createLayerPersistence(store, initialLayersData),
     };
   });
 
