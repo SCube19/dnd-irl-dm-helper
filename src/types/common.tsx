@@ -9,6 +9,8 @@ export enum InteractionMode {
   PAN = "pan",
   DRAW = "draw",
   RECT = "rect",
+  COVER = "cover",
+  COVER_RECT = "cover_rect",
   GRID = "grid",
 }
 

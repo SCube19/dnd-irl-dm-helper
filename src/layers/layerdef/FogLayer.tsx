@@ -25,18 +25,18 @@ export const FogLayerKey = defineLayerKey<FogLayerState>("fog", {
 });
 
 const REVEAL_MODES = new Set([InteractionMode.DRAW, InteractionMode.RECT]);
+const HIDE_MODES = new Set([InteractionMode.COVER, InteractionMode.COVER_RECT]);
 
 export function FogLayer() {
   const { imageSize, gridSpacing, pixelToGrid } = useGrid();
   const [{ visible, viewerRole, eraseSize }] = useLayerStore(FogLayerKey);
-  const { revealTexture, handleReveal, getFogEpochNow } = useFogOfWar(
-    imageSize,
-    gridSpacing,
-  );
+  const { revealTexture, handleReveal, handleHide, getFogEpochNow } =
+    useFogOfWar(imageSize, gridSpacing);
 
   const paintFor = (mode: InteractionMode) => {
     if (!visible) return null;
     if (REVEAL_MODES.has(mode)) return handleReveal;
+    if (HIDE_MODES.has(mode)) return handleHide;
     return null;
   };
 
