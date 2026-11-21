@@ -1,9 +1,14 @@
 import React, { useState } from "react";
 import { View } from "react-native";
 import { MapControlsOverlay } from "../../components/MapControlsOverlay";
+import { TokenBrushPanel } from "../../components/TokenBrushPanel";
 import { useLayerStore } from "../orchestrator";
 import { FogLayerKey, type FogLayerState } from "./FogLayer";
+import { TokenLayerKey, type TokenLayerState } from "./token";
 import { InteractionMode } from "../../types/common";
+import { parseRgbString, toRgbString } from "../../utils/color";
+
+const DEFAULT_TOKEN_RGB = { r: 239, g: 68, b: 68 };
 
 interface UILayerProps {
   mapName: string;
@@ -27,9 +32,12 @@ export function UILayer({
 }: UILayerProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [fog, setFog] = useLayerStore(FogLayerKey);
+  const [tokens, setTokens] = useLayerStore(TokenLayerKey);
 
   const updateFog = (patch: Partial<FogLayerState>) =>
     setFog((prev) => ({ ...prev, ...patch }));
+  const updateTokens = (patch: Partial<TokenLayerState>) =>
+    setTokens((prev) => ({ ...prev, ...patch }));
 
   const handleSave = async () => {
     setIsEditingName(false);
@@ -54,6 +62,16 @@ export function UILayer({
         setFogOfWarVisible={(visible) => updateFog({ visible })}
         viewerRole={fog.viewerRole}
         setViewerRole={(viewerRole) => updateFog({ viewerRole })}
+        tokenPanel={
+          <TokenBrushPanel
+            color={parseRgbString(tokens.activeColor, DEFAULT_TOKEN_RGB)}
+            onColorChange={(c) => updateTokens({ activeColor: toRgbString(c) })}
+            size={tokens.activeSize}
+            onSizeChange={(activeSize) => updateTokens({ activeSize })}
+            imageUri={tokens.activeImageUri}
+            onImageChange={(activeImageUri) => updateTokens({ activeImageUri })}
+          />
+        }
       />
     </View>
   );

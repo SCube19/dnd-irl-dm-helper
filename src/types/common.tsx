@@ -11,6 +11,9 @@ export enum InteractionMode {
   RECT = "rect",
   COVER = "cover",
   COVER_RECT = "cover_rect",
+  TOKEN_ADD = "token_add",
+  TOKEN_MOVE = "token_move",
+  TOKEN_REMOVE = "token_remove",
   GRID = "grid",
 }
 

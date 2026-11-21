@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -44,6 +44,9 @@ export function OrchestratedInteractionConnector({
     cursor,
     containerRef,
     containerSize,
+    setCursor,
+    getContainerPoint,
+    getContentPoint,
   } = transform;
 
   const panZoomGesture = usePanZoomGesture({
@@ -76,7 +79,78 @@ export function OrchestratedInteractionConnector({
       mode === InteractionMode.RECT || mode === InteractionMode.COVER_RECT,
   });
 
-  const gestures = Gesture.Race(panZoomGesture, eraseGesture, rectSelectGesture);
+  const isDraggingRef = useRef(false);
+
+  // Leaving move mode mid-drag cancels the drag.
+  useEffect(() => {
+    if (mode === InteractionMode.TOKEN_MOVE || !isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    setCursor();
+    dispatch("dragEnd", { mode });
+  }, [mode, setCursor, dispatch]);
+
+  // Mouse hover (web only).
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || isDraggingRef.current) return;
+      const container = containerRef.current as unknown as
+        | (Node & { node?: Node })
+        | null;
+      const domNode = container?.node ?? container;
+      if (domNode && e.target instanceof Node && !domNode.contains(e.target)) {
+        dispatch("hoverLeave", {});
+        return;
+      }
+      const point = getContentPoint(
+        getContainerPoint({ x: e.clientX, y: e.clientY }),
+      );
+      dispatch("hover", { point, mode });
+    };
+    const handleBlur = () => dispatch("hoverLeave", {});
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [mode, containerRef, getContainerPoint, getContentPoint, dispatch]);
+
+  const dragGesture = Gesture.Pan()
+    .enabled(mode === InteractionMode.TOKEN_MOVE)
+    .minDistance(0)
+    .onBegin((e) => {
+      isDraggingRef.current = true;
+      setCursor("grabbing");
+      dispatch("dragStart", { point: getContentPoint(e), mode });
+    })
+    .onUpdate((e) => dispatch("dragMove", { point: getContentPoint(e), mode }))
+    .onFinalize((e) => {
+      isDraggingRef.current = false;
+      setCursor();
+      dispatch("dragEnd", { point: getContentPoint(e), mode });
+    })
+    .runOnJS(true);
+
+  const tapGesture = Gesture.Tap()
+    .enabled(
+      mode === InteractionMode.TOKEN_ADD ||
+        mode === InteractionMode.TOKEN_REMOVE ||
+        mode === InteractionMode.PAN,
+    )
+    .maxDuration(300)
+    .onEnd((e) => dispatch("tap", { point: getContentPoint(e), mode }))
+    .runOnJS(true);
+
+  const gestures = Gesture.Race(
+    panZoomGesture,
+    eraseGesture,
+    rectSelectGesture,
+    dragGesture,
+    tapGesture,
+  );
 
   const panZoomStyle = useAnimatedStyle(() => ({
     transform: [
