@@ -163,10 +163,33 @@ export function useFogOfWar(
     [drawRectToTexture],
   );
 
+  /** PNG (base64) of the reveal texture, with timestamps normalized. */
+  const serializeTexture = useCallback((): string | null => {
+    const surface = revealTextureRef.current;
+    if (!surface) return null;
+    resetEpoch();
+    surface.flush();
+    return surface.makeImageSnapshot().encodeToBase64() || null;
+  }, [resetEpoch]);
+
+  const deserializeTexture = useCallback(
+    (base64: string) => {
+      const surface = revealTextureRef.current;
+      const raw = base64.replace(/^data:[^;]+;base64,/, "");
+      const image = Skia.Image.MakeImageFromEncoded(Skia.Data.fromBase64(raw));
+      if (!surface || !image) return;
+      drawScaled(surface, image, gridWidth, gridHeight);
+      resetEpoch();
+    },
+    [gridWidth, gridHeight, resetEpoch],
+  );
+
   return {
     revealTexture: snapshotRef.current,
     handleReveal,
     handleHide,
+    serializeTexture,
+    deserializeTexture,
     getFogEpochNow,
   };
 }

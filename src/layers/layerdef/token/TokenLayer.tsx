@@ -4,6 +4,7 @@ import { clamp } from "react-native-reanimated";
 import { useGrid } from "../../../hooks/useGrid";
 import {
   useLayerInteraction,
+  useLayerPersistence,
   useLayerStore,
   type PointerPayload,
 } from "../../orchestrator";
@@ -27,8 +28,12 @@ import {
 import {
   TokenLayerKey,
   createTokenId,
+  isTokenSize,
+  normalizeToken,
   type GridCell,
+  type PersistedTokenLayerState,
   type Token,
+  type TokenLayerState,
 } from "./tokenTypes";
 
 /** Dragging further than this (squared px) hides hover/selection previews. */
@@ -139,6 +144,31 @@ export function TokenLayer() {
     setHeldTokenId(null);
     setHoverCell(null);
   };
+
+  useLayerPersistence<TokenLayerState, PersistedTokenLayerState>(
+    TokenLayerKey,
+    {
+      serialize: (state) => ({
+        tokens: state.tokens,
+        activeColor: state.activeColor,
+        activeSize: state.activeSize,
+        activeImageUri: state.activeImageUri,
+      }),
+      deserialize: (data) => {
+        if (!data) return;
+        const restoredTokens = data.tokens?.map(normalizeToken);
+        cancelActiveDrag(restoredTokens ?? tokens);
+        setTokenState((prev) => ({
+          tokens: restoredTokens ?? prev.tokens,
+          activeColor: data.activeColor ?? prev.activeColor,
+          activeSize: isTokenSize(data.activeSize)
+            ? data.activeSize
+            : prev.activeSize,
+          activeImageUri: data.activeImageUri ?? prev.activeImageUri,
+        }));
+      },
+    },
+  );
 
   const startDrag = ({ point, mode }: PointerPayload) => {
     if (mode !== InteractionMode.TOKEN_MOVE) return;
