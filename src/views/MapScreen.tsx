@@ -7,7 +7,6 @@ import {
   Text,
 } from "react-native";
 import { MapInteractionConnector } from "../components/MapInteractionConnector";
-import { MapGrid } from "../components/MapGrid";
 import { MapControlsOverlay } from "../components/MapControlsOverlay";
 import "../styles/global.css";
 import FogShader from "../shaders/FogShader";
@@ -16,6 +15,8 @@ import { useFogOfWar } from "../hooks/useFogOfWar";
 import * as MapDataStorage from "../utils/MapDataStorage";
 import { InteractionMode, Point, Measure } from "../types/common";
 import { ViewerRole } from "../types/common";
+import { GridLayer } from "../layers";
+import { MapSpaceProvider } from "../layers/MapSpaceProvider";
 
 interface MapScreenProps {
   route: any;
@@ -29,7 +30,6 @@ const maxResolution = 1024;
 function MapScreen({ route }: MapScreenProps) {
   const { map: mapUri } = route.params || {};
 
-  const [scale, setScale] = useState<number>(1);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>(
     InteractionMode.PAN,
   );
@@ -44,8 +44,6 @@ function MapScreen({ route }: MapScreenProps) {
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const containerSize = { width: windowWidth, height: windowHeight };
-
-  const gridColor: string = "#ddddddb0";
 
   const [fogOfWarVisible, setFogOfWarVisible] = useState<boolean>(true);
   const [viewerRole, setViewerRole] = useState<ViewerRole>("dm");
@@ -187,7 +185,6 @@ function MapScreen({ route }: MapScreenProps) {
           transform={mapTransform}
           maxScale={maxScale}
           minScale={minScale}
-          onScaleUpdate={(newScale) => setScale(newScale)}
           onTouch={onTouchProxy}
           onDraw={onDrawProxy}
           onRectSelect={(start: any, end: any) => {
@@ -215,43 +212,47 @@ function MapScreen({ route }: MapScreenProps) {
             }}
             className="transition-opacity duration-300"
           >
-            <Image
-              source={
-                typeof currentDisplayUri === "string"
-                  ? { uri: currentDisplayUri }
-                  : currentDisplayUri
-              }
-              style={{
-                width: imageSize.width,
-                height: imageSize.height,
-              }}
-              onLoad={() => {
-                setTimeout(() => setIsMapReady(true), 50);
-              }}
-            />
-            <View className="w-full h-full absolute z-20 left-0 top-0">
-              {fogOfWarVisible && (
-                <FogShader
-                  shaderSize={{
-                    width: imageSize.width,
-                    height: imageSize.height,
-                  }}
-                  squareSize={{
-                    width: gridSpacing,
-                    height: gridSpacing,
-                  }}
-                  revealTexture={revealTexture}
-                  fogOpacity={viewerRole === "dm" ? 0.35 : 1.0}
-                  getFogEpochNow={getFogEpochNow}
-                />
-              )}
-            </View>
-            <MapGrid
+            <MapSpaceProvider
+              imageSize={imageSize}
               gridSpacing={gridSpacing}
-              color={gridColor}
-              gridSize={{ width: imageSize.width, height: imageSize.height }}
-              scale={scale}
-            />
+              scale={mapTransform.scale}
+              translationX={mapTransform.translationX}
+              translationY={mapTransform.translationY}
+              containerSize={containerSize}
+            >
+              <Image
+                source={
+                  typeof currentDisplayUri === "string"
+                    ? { uri: currentDisplayUri }
+                    : currentDisplayUri
+                }
+                style={{
+                  width: imageSize.width,
+                  height: imageSize.height,
+                }}
+                onLoad={() => {
+                  setTimeout(() => setIsMapReady(true), 50);
+                }}
+              />
+              <View className="w-full h-full absolute z-20 left-0 top-0">
+                {fogOfWarVisible && (
+                  <FogShader
+                    shaderSize={{
+                      width: imageSize.width,
+                      height: imageSize.height,
+                    }}
+                    squareSize={{
+                      width: gridSpacing,
+                      height: gridSpacing,
+                    }}
+                    revealTexture={revealTexture}
+                    fogOpacity={viewerRole === "dm" ? 0.35 : 1.0}
+                    getFogEpochNow={getFogEpochNow}
+                  />
+                )}
+              </View>
+              <GridLayer />
+            </MapSpaceProvider>
           </View>
         </MapInteractionConnector>
 
