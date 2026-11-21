@@ -34,16 +34,14 @@ const MapCard = ({
       onHoverIn={() => setShow(true)}
       onHoverOut={() => setShow(false)}
       className="relative w-full pb-[100%] bg-base-100 rounded-box shadow-md overflow-hidden flex items-center justify-center cursor-pointer transform transition duration-200 hover:scale-[1.02]"
-      style={{ aspectRatio: "1/1" }} // Ensure square aspect ratio
+      style={{ aspectRatio: "1/1" }}
     >
       {photoUri ? (
-        // Display the photo if photoUri is provided
         <>
-          {/* Increase size to 105% */}
           <View className="transition-none absolute z-20 inset-0 transparent hover:bg-white/20 hover:backdrop-blur-sm">
             {show && (
               <Text className="flex h-full justify-center items-center color-base-100 font-extrabold sm:text-sm md:text-md lg:text-lg xl:text-xl text-center text-shadow-lg wrap-anywhere m-auto p-4">
-                {mapName ? mapName : "Unnamed"}
+                {mapName || "Unnamed"}
               </Text>
             )}
             {onDelete && (
@@ -63,19 +61,18 @@ const MapCard = ({
               resizeMode="cover"
               style={styles.cover}
               className="transition"
-            ></Image>
-            <View style={styles.glare} className="bg-white"></View>
+            />
+            <View style={styles.glare} className="bg-white" />
           </View>
         </>
       ) : (
-        // Display the "+" sign for adding new photos
         <View className="absolute inset-0 w-full h-full bg-base-100 border-box border-base-300 flex items-center justify-center rounded-box">
           <Text className="text-6xl/10 font-light">+</Text>
           <Image
             className="opacity-30 bg-blend-overlay h-full w-full"
             source={turbulence}
             style={styles.cover}
-          ></Image>
+          />
         </View>
       )}
     </Pressable>

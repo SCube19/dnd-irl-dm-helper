@@ -7,22 +7,25 @@ import * as ImageStorage from "../utils/ImageStorage";
 import * as MapDataStorage from "../utils/MapDataStorage";
 
 const header = require("../../assets/dndheader.png");
+const placeholderMap = require("../../assets/placeholders/1.png");
 
 function HomeScreen() {
   const [uploadVisible, setUploadVisible] = useState<boolean>(false);
-  const [savedImages, setSavedImages] = useState<{ id: string; uri: string }[]>([]);
+  const [savedImages, setSavedImages] = useState<{ id: string; uri: string }[]>(
+    [],
+  );
   const [mapStates, setMapStates] = useState<Record<string, any>>({});
   const navigation = useNavigation<any>();
 
-  // Fetch saved images and map states
   const fetchData = async () => {
-    const images = await ImageStorage.getImages();
-    const states = await MapDataStorage.getAllMapData();
+    const [images, states] = await Promise.all([
+      ImageStorage.getImages(),
+      MapDataStorage.getAllMapData(),
+    ]);
     setSavedImages(images);
     setMapStates(states);
   };
 
-  // Refresh data when the screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchData();
@@ -31,18 +34,13 @@ function HomeScreen() {
 
   const handleUpload = async (imageUri: string, name: string) => {
     try {
-      // 1. Save image permanently
       const saved = await ImageStorage.saveImage(imageUri);
-
-      // 2. Save initial map data with unique ID
       await MapDataStorage.saveMapData(saved.id, {
-        name: name,
-        imageUri: saved.uri, // Use the real URI for display
+        name,
+        imageUri: saved.uri,
       });
-
       setUploadVisible(false);
       await fetchData();
-      // Navigate to Map with the new map ID
       navigation.navigate("Map", { map: saved.id });
     } catch (e) {
       console.error("Failed to save and upload image:", e);
@@ -63,17 +61,11 @@ function HomeScreen() {
     navigation.navigate("Map", { map: uri });
   };
 
-  const placeholderMap = require("../../assets/placeholders/1.png");
-
   return (
     <SafeAreaView className="bg-base-200 h-full w-screen">
       <ScrollView className="h-full w-screen px-5">
         <View className="flex items-center mt-8">
-          <Image
-            resizeMode="contain"
-            source={header}
-            className="w-64 h-32"
-          ></Image>
+          <Image resizeMode="contain" source={header} className="w-64 h-32" />
         </View>
 
         <View className="mb-20">
@@ -82,7 +74,6 @@ function HomeScreen() {
           </Text>
 
           <View className="flex-row flex-wrap justify-center gap-6 max-w-6xl mx-auto">
-            {/* Upload New Card */}
             <View className="w-40 sm:w-48">
               <MapCard onPress={() => setUploadVisible(true)} />
               <Text className="text-center mt-2 font-semibold text-content-base/60">
@@ -90,7 +81,6 @@ function HomeScreen() {
               </Text>
             </View>
 
-            {/* Test Placeholder */}
             <View className="w-40 sm:w-48">
               <MapCard
                 photoUri={placeholderMap}
@@ -102,11 +92,9 @@ function HomeScreen() {
               </Text>
             </View>
 
-            {/* Custom User Maps */}
             {savedImages.map((savedImg, index) => {
               const session = mapStates[savedImg.id];
               const mapName = session?.name || `Map ${index + 1}`;
-              const hasData = session && session.revealedSquares?.length > 0;
               const displayUri = session?.imageUri || savedImg.uri;
 
               return (

@@ -6,7 +6,7 @@ import SliderPrimary from "./sliders/SliderPrimary";
 import { InteractionMode } from "../types/common";
 import SwitchPrimary from "./switches/SwitchPrimary";
 import Card from "./cards/Card";
-import { ViewerRole } from "../types/entity";
+import { ViewerRole } from "../types/common";
 
 export interface MapControlsOverlayProps {
   handleSave: () => void;

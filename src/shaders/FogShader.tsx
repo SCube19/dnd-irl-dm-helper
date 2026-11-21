@@ -9,12 +9,11 @@ import {
   BlurMask,
   FilterMode,
 } from "@shopify/react-native-skia";
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import {
   useSharedValue,
   useDerivedValue,
   useFrameCallback,
-  type SharedValue,
 } from "react-native-reanimated";
 import { Measure } from "../types/common";
 
@@ -234,44 +233,17 @@ const FogShader = memo(
     });
 
     const canvasResize = 1.4;
-    const shaderResize = 1.0;
-
-    const shaderInCanvasPlacement: Measure = useMemo(
-      () => ({
-        width:
-          (shaderSize.width * canvasResize - shaderSize.width * shaderResize) /
-          2,
-        height:
-          (shaderSize.height * canvasResize -
-            shaderSize.height * shaderResize) /
-          2,
-      }),
-      [shaderSize],
-    );
-
-    const canvasInParentPlacement: Measure = useMemo(
-      () => ({
-        width:
-          -shaderInCanvasPlacement.width -
-          (shaderSize.width * shaderResize - shaderSize.width) / 2,
-        height:
-          -shaderInCanvasPlacement.height -
-          (shaderSize.height * shaderResize - shaderSize.height) / 2,
-      }),
-      [shaderSize, shaderInCanvasPlacement],
-    );
+    const padX = (shaderSize.width * (canvasResize - 1)) / 2;
+    const padY = (shaderSize.height * (canvasResize - 1)) / 2;
 
     const uniforms = useDerivedValue(
       () => ({
         iTime: time.value,
         iResolution: [shaderSize.width, shaderSize.height, 0],
         u_squareSize: [squareSize.width, squareSize.height],
-        u_canvasOffset: [
-          canvasInParentPlacement.width,
-          canvasInParentPlacement.height,
-        ],
+        u_canvasOffset: [-padX, -padY],
       }),
-      [time, shaderSize, squareSize, canvasInParentPlacement],
+      [time, shaderSize, squareSize, padX, padY],
     );
 
     if (!revealTexture) return null;
@@ -282,20 +254,19 @@ const FogShader = memo(
           width: shaderSize.width * canvasResize,
           height: shaderSize.height * canvasResize,
           position: "absolute",
-          left: canvasInParentPlacement.width,
-          top: canvasInParentPlacement.height,
+          left: -padX,
+          top: -padY,
           pointerEvents: "none",
         }}
       >
         <Group opacity={fogOpacity}>
           <Rect
-            x={shaderInCanvasPlacement.width}
-            y={shaderInCanvasPlacement.height}
-            width={shaderSize.width * shaderResize}
-            height={shaderSize.height * shaderResize}
+            x={padX}
+            y={padY}
+            width={shaderSize.width}
+            height={shaderSize.height}
           >
             <Shader source={Fog} uniforms={uniforms}>
-              {/* FilterMode.Nearest strictly disables bilinear interpolation on Skia's end */}
               <ImageShader
                 image={revealTexture}
                 sampling={{ filter: FilterMode.Nearest }}
