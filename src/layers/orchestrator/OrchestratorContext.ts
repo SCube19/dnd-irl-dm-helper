@@ -1,11 +1,13 @@
 import { createContext, useContext } from "react";
 import type { LayerStore } from "./store";
 import type { LayerEventBus } from "./interaction";
+import type { LayerPersistence } from "./persistence";
 
 /** Stable for the orchestrator's lifetime, so reading it never re-renders. */
 export interface LayerServices {
   store: LayerStore;
   events: LayerEventBus;
+  persistence: LayerPersistence;
 }
 
 export const LayerServicesContext = createContext<LayerServices | null>(null);
