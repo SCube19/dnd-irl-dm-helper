@@ -57,7 +57,7 @@ export function OrchestratedInteractionConnector({
     transform,
     onDraw: (point) => dispatch("draw", { point, mode }),
     onTouch: (point) => dispatch("tap", { point, mode }),
-    enabled: mode === InteractionMode.DRAW,
+    enabled: mode === InteractionMode.DRAW || mode === InteractionMode.COVER,
   });
 
   const rectState = {
@@ -72,7 +72,8 @@ export function OrchestratedInteractionConnector({
     transform,
     rectState,
     onRectSelect: (start, end) => dispatch("rectSelect", { start, end, mode }),
-    enabled: mode === InteractionMode.RECT,
+    enabled:
+      mode === InteractionMode.RECT || mode === InteractionMode.COVER_RECT,
   });
 
   const gestures = Gesture.Race(panZoomGesture, eraseGesture, rectSelectGesture);
@@ -93,6 +94,7 @@ export function OrchestratedInteractionConnector({
     ...(Platform.OS === "web" ? { cursor: cursor.value as any } : {}),
   }));
 
+  const isCoverRect = mode === InteractionMode.COVER_RECT;
   const rectStyle = useAnimatedStyle(() => ({
     display: rectState.isActive.value ? "flex" : "none",
     position: "absolute" as const,
@@ -101,8 +103,12 @@ export function OrchestratedInteractionConnector({
     width: Math.abs(rectState.currentX.value - rectState.startX.value),
     height: Math.abs(rectState.currentY.value - rectState.startY.value),
     borderWidth: 2,
-    borderColor: "rgba(50, 150, 255, 0.8)",
-    backgroundColor: "rgba(50, 150, 255, 0.3)",
+    borderColor: isCoverRect
+      ? "rgba(30, 41, 59, 0.9)"
+      : "rgba(50, 150, 255, 0.8)",
+    backgroundColor: isCoverRect
+      ? "rgba(15, 23, 42, 0.55)"
+      : "rgba(50, 150, 255, 0.3)",
     zIndex: 1000,
   }));
 

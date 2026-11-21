@@ -29,10 +29,13 @@ const MODE_BUTTONS: [InteractionMode, string][] = [
   [InteractionMode.PAN, "Pan"],
   [InteractionMode.DRAW, "Erase"],
   [InteractionMode.RECT, "Rect"],
+  [InteractionMode.COVER, "Cover"],
+  [InteractionMode.COVER_RECT, "Cover Rect"],
   [InteractionMode.GRID, "Grid"],
 ];
 
 const MODE_HINTS: Partial<Record<InteractionMode, string>> = {
+  [InteractionMode.COVER_RECT]: "Drag a rectangle to cover with fog",
   [InteractionMode.RECT]: "Drag a rectangle to reveal fog",
 };
 
@@ -54,6 +57,9 @@ export const MapControlsOverlay = ({
   setViewerRole,
 }: MapControlsOverlayProps) => {
   const hint = MODE_HINTS[interactionMode];
+  const isBrushMode =
+    interactionMode === InteractionMode.DRAW ||
+    interactionMode === InteractionMode.COVER;
 
   return (
     <View className="absolute top-6 left-6 right-6 z-50 flex-row justify-between items-start pointer-events-none">
@@ -118,10 +124,12 @@ export const MapControlsOverlay = ({
             ))}
           </View>
 
-          {interactionMode === InteractionMode.DRAW && (
+          {isBrushMode && (
             <View className="flex-row items-center justify-between w-full px-2 mt-1">
               <Text className="mr-3 font-bold text-xs text-content-base/70">
-                Erase Brush Size:
+                {interactionMode === InteractionMode.DRAW
+                  ? "Erase Brush Size:"
+                  : "Cover Brush Size:"}
               </Text>
               <SliderPrimary
                 value={eraseSize}
